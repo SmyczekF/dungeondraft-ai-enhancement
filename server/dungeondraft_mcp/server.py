@@ -1,6 +1,6 @@
 """MCP server exposing Dungeondraft map operations for AI-assisted map building.
 
-Runs over stdio (the standard transport for Claude Desktop / Claude Code) and
+Runs over stdio (supported by Codex) and
 forwards each tool call to the in-app bridge mod over localhost TCP.
 
 Coordinates are in world "woxel" (pixel) space. Call get_status() for the map
@@ -16,14 +16,25 @@ import tempfile
 import time
 from typing import Optional
 
-from mcp.server.fastmcp import FastMCP, Image
+from mcp.server.mcpserver import MCPServer, Image
+from mcp.server.mcpserver.exceptions import ToolError
 
 from .bridge_client import BridgeClient, BridgeError
 
 HOST = os.environ.get("DD_BRIDGE_HOST", "127.0.0.1")
 PORT = int(os.environ.get("DD_BRIDGE_PORT", "8787"))
 
-mcp = FastMCP("dungeondraft")
+mcp = MCPServer(
+    "dungeondraft",
+    instructions=(
+        "Controls the map open in the local Dungeondraft editor. Call ping first, "
+        "then get_status; map editing requires map_open=true. Coordinates are "
+        "world pixels (woxels), 256 per tile. Discover asset paths with "
+        "list_asset_categories and list_assets before creating elements. "
+        "Use returned element IDs for edits. Check visual changes with the "
+        "camera and screenshot tools. Edits affect the live map."
+    ),
+)
 bridge = BridgeClient(HOST, PORT)
 
 _SCREENSHOT_PATH = os.path.join(tempfile.gettempdir(), "dd_mcp_screenshot.png")
@@ -98,7 +109,7 @@ def get_element(id: int) -> dict:
 
 @mcp.tool()
 def list_levels() -> dict:
-    """List the map's levels (floors) with their index, id and label, plus the current index."""
+    """List levels with their index, ID and label, plus current_index and current_id."""
     return bridge.request("list_levels")
 
 
@@ -290,14 +301,14 @@ def place_pattern(
     asset: a pattern asset path from list_assets(category=...).
     category: which asset bank — 'Patterns', 'Patterns Colorable', 'Materials',
       'Simple Tiles', or 'Smart Tiles'.
-    color: '#rrggbb' tint. Omit to use the tileset's own default tint (wood is
-      brown, etc.) instead of white — match the UI by leaving it unset.
+    color: '#rrggbb' tint. If omitted, the bridge uses a fixed opaque neutral
+      tint so calls do not inherit persistent PatternShapeTool color state.
     rotation: pattern rotation in degrees.
     z: absolute z_index. Default -100 sits below objects (z 0) and above terrain
       shapes (z -200). Raise toward 0+ to overlay on top.
     """
     if (rect is None) == (points is None):
-        raise ValueError("provide exactly one of 'rect' or 'points'")
+        raise ToolError("provide exactly one of 'rect' or 'points'")
     params: dict = {"asset": asset, "category": category, "z": z}
     if rect is not None:
         params["rect"] = rect
@@ -343,7 +354,7 @@ def build_room(
     Returns { wall_id, floor_id?, points }.
     """
     if (rect is None) == (points is None):
-        raise ValueError("provide exactly one of 'rect' or 'points'")
+        raise ToolError("provide exactly one of 'rect' or 'points'")
     params: dict = {
         "floor": floor,
         "floor_category": floor_category,
@@ -428,7 +439,7 @@ def fill_region(
     rate: paint strength 0..1 (1 = fully replace). Undoable via undo().
     """
     if (rect is None) == (points is None):
-        raise ValueError("provide exactly one of 'rect' or 'points'")
+        raise ToolError("provide exactly one of 'rect' or 'points'")
     params: dict = {"slot": slot, "rate": rate}
     if rect is not None:
         params["rect"] = rect
@@ -708,9 +719,9 @@ def clear_selection() -> dict:
 def undo() -> dict:
     """Reverse the last reversible edit you made (create / move / modify / terrain).
 
-    The bridge keeps its own undo/redo stack, so this reliably steps back through
-    your own edits. Note: it is independent of Dungeondraft's Ctrl+Z, and
-    delete_element is not reversible.
+    The bridge keeps its own undo/redo stack for supported creates, transforms,
+    terrain and cave edits. It is independent of Dungeondraft's Ctrl+Z.
+    delete_element, place_pattern, and build_room are not undo-recorded.
     """
     return bridge.request("undo")
 

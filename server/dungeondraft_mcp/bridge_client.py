@@ -9,8 +9,10 @@ from __future__ import annotations
 import json
 import socket
 
+from mcp.server.mcpserver.exceptions import ToolError
 
-class BridgeError(Exception):
+
+class BridgeError(ToolError):
     """Raised when the bridge is unreachable or returns an error response."""
 
 

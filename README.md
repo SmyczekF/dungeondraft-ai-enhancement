@@ -1,6 +1,6 @@
 # dungeondraft-mcp
 
-An MCP server that lets an LLM (Claude Code, Claude Desktop, etc.) drive a
+An MCP server that lets Codex drive a
 **running Dungeondraft instance** — place objects, draw walls, inspect the map —
 through Dungeondraft's GDScript modding API.
 
@@ -8,7 +8,7 @@ Dungeondraft has no built-in server to talk to, so this project is **two halves*
 that meet over a localhost socket:
 
 ```
-Claude / MCP client
+Codex
       │  MCP (stdio)
       ▼
 server/   ── Python MCP server  (this repo)
@@ -24,10 +24,12 @@ The mod opens a TCP server inside Dungeondraft and polls it every frame from the
 `update(delta)` hook; the Python side exposes each capability as an MCP tool and
 forwards calls as JSON. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
 
-> **Status: working.** Confirmed end-to-end against Dungeondraft on **Godot
-> 3.4.2** — raw TCP from the modding sandbox works, no fallback needed. 39 tools
-> across query / create / modify / terrain / levels / selection / capture /
-> camera / undo (see below).
+> **Compatibility:** This version targets the installed Windows build,
+> **Dungeondraft 1.2.0.1**. Documented API calls were checked against the
+> published modding reference, but the bridge has not been exercised in 1.2.0.1
+> with a map open. See [API_COMPATIBILITY.md](API_COMPATIBILITY.md) for the audit.
+> It exposes 39 tools across query, creation, terrain, editing, levels,
+> selection, capture, camera, and undo.
 
 ## What the AI can do
 
@@ -51,10 +53,9 @@ forwards calls as JSON. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
 - **Camera:** `get_camera`, `set_camera`, `focus_element` (center on one
   element), `fit_elements` (frame a group) — point the view before a
   `screenshot` to inspect specific spots like a door cut into a wall.
-- **Undo:** the bridge keeps its own undo/redo stacks for create / move / modify
-  / terrain edits, so `undo` / `redo` let the model reliably reverse its own
-  changes (independent of Dungeondraft's Ctrl+Z; `delete_element` is not
-  reversible).
+- **Undo:** the bridge keeps its own undo/redo stacks for supported creates,
+  move / modify, terrain, and cave edits (independent of Dungeondraft's Ctrl+Z).
+  `delete_element`, `place_pattern`, and `build_room` are not undo-recorded.
 
 Every element is referenced by an integer `id`; create and list calls return
 ids you feed back into edit calls. Coordinates are woxel (pixel) space — call
@@ -62,10 +63,9 @@ ids you feed back into edit calls. Coordinates are woxel (pixel) space — call
 
 ## Setup
 
-**Prerequisites:** [Dungeondraft](https://dungeondraft.net/) (tested on the
-Godot 3.4.2 builds), Python **3.10+**, and an MCP client (e.g. Claude Code or
-Claude Desktop). On Windows, `python`/`.venv\Scripts\` replace the `python3`/
-`.venv/bin/` paths shown below.
+**Prerequisites:** [Dungeondraft](https://dungeondraft.net/) **1.2.0.1**,
+Python **3.10+**, and Codex on the same computer. The examples below use
+PowerShell on Windows.
 
 ### 1. Install the mod into Dungeondraft
 
@@ -77,62 +77,61 @@ Claude Desktop). On Windows, `python`/`.venv\Scripts\` replace the `python3`/
 On load you should see in the Dungeondraft log:
 
 ```
-[mcp-bridge] listening on 127.0.0.1:8787 (protocol v6)
+[mcp-bridge] listening on 127.0.0.1:8787 (protocol v16)
 ```
 
 ### 2. Install the MCP server
 
-Install into a dedicated venv (most distros' system Python is externally
-managed, so a venv keeps the entrypoint clean and stable). Run from the repo
-root:
+Install into a dedicated virtual environment. Run from the repository root:
 
-```bash
-python3 -m venv .venv
-.venv/bin/pip install -e ./server
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .\server
 ```
 
 This installs the `dungeondraft_mcp` package and creates the
-`.venv/bin/dungeondraft-mcp` entrypoint.
+`.venv\Scripts\dungeondraft-mcp.exe` entrypoint. On macOS/Linux, use
+`python3 -m venv .venv` and `.venv/bin/python -m pip install -e ./server`.
 
 ### 3. Verify the bridge works
 
-With DD open and a map loaded, run the per-command validator. It builds a small
-throwaway scene near the map center, prints PASS/FAIL for each command, then
-deletes what it made:
+With Dungeondraft open and a map loaded, run the bridge smoke test. It makes
+temporary objects near the map center, prints PASS/FAIL, then removes them. Run
+it on a disposable map: a failed test may leave objects behind.
 
-```bash
-.venv/bin/python server/test_bridge.py
+```powershell
+.\.venv\Scripts\python.exe .\server\test_bridge.py
 ```
 
-If it fails to connect *and* you never saw the `listening` line in DD's log, the
-sandbox blocked `TCP_Server` — see the fallback note in PROTOCOL.md.
+If it cannot connect, confirm the mod is enabled, a map is open, and the log
+shows the `listening` line. Port 8787 must be available on loopback.
 
 To *see* something get built (a small furnished room left on the map, rather
-than a self-cleaning test), run `.venv/bin/python server/demo_build.py`.
+than a self-cleaning test), run
+`.\.venv\Scripts\python.exe .\server\demo_build.py`.
 
-### 4. Wire up your MCP client
+### 4. Connect Codex
 
-Register the entrypoint by its **absolute path**. For **Claude Code**:
+Register the installed entrypoint by its **absolute path**:
 
-```bash
-claude mcp add dungeondraft -s user -- "$PWD/.venv/bin/dungeondraft-mcp"
+```powershell
+$server = (Resolve-Path .\.venv\Scripts\dungeondraft-mcp.exe).Path
+codex mcp add dungeondraft -- $server
+codex mcp list
 ```
 
-Restart Claude Code so the server loads (`/mcp` shows its status and tools).
-Or add to a client config (e.g. Claude Desktop `claude_desktop_config.json`),
-using the absolute path:
+Alternatively, add this to `~/.codex/config.toml`, replacing the command with
+your actual absolute path (TOML single quotes preserve Windows backslashes):
 
-```json
-{
-  "mcpServers": {
-    "dungeondraft": {
-      "command": "/abs/path/to/dungeondraft-mcp/.venv/bin/dungeondraft-mcp"
-    }
-  }
-}
+```toml
+[mcp_servers.dungeondraft]
+command = 'C:\absolute\path\to\dungeondraft-mcp\.venv\Scripts\dungeondraft-mcp.exe'
+tool_timeout_sec = 120
 ```
 
-Then ask the model things like *"what's the status of my Dungeondraft map?"* or
+Restart Codex after adding the server, then check `/mcp` in Codex. The longer
+tool timeout allows full-map exports to finish. Ask Codex things like
+*"what's the status of my Dungeondraft map?"* or
 *"list some object assets and drop a chair in the middle of the map."*
 
 ## Configuration
@@ -156,8 +155,8 @@ Adding a capability is symmetric — one handler on each side:
 2. **Server** (`server/dungeondraft_mcp/server.py`): add an `@mcp.tool()` that
    calls `bridge.request("my_command", ...)`.
 
-Good next targets: pattern shapes (floors), region-scoped terrain fill, and
-grouping a batch of edits into a single undo step.
+The mod manifest requires Dungeondraft `1.2.0.1`. Its `dd_version` field is
+the minimum accepted version, and this project no longer targets older builds.
 
 ### Dev loop (read this before iterating on the mod)
 
@@ -166,8 +165,8 @@ Two things will bite you if you don't know them up front:
 - **Editing the mod and the server are different reload paths.** GDScript
   changes in `mcp_bridge.gd` take effect when you **reload the mod inside
   Dungeondraft** (or restart DD). New or changed `@mcp.tool()` definitions in
-  `server.py` only appear after the **MCP server process restarts** — in Claude
-  Code that means `/mcp` → reconnect `dungeondraft` (or restart the client).
+  `server.py` only appear after the **MCP server process restarts** — restart
+  Codex after changing tool definitions.
   The install is editable (`pip install -e`), so you never reinstall; you just
   cycle the process. Adding a *new tool* needs **both** reloads (mod for the
   handler, server for the tool registration); changing an *existing* handler's
@@ -191,6 +190,8 @@ server/                        the Python MCP server
   test_bridge.py               standalone per-command smoke test
   demo_build.py                builds a visible sample room and leaves it
 PROTOCOL.md                    wire protocol + implementation notes
+AGENTS.md                      Codex agent instructions
+API_COMPATIBILITY.md           installed-version and API audit
 ```
 
 ## Credits

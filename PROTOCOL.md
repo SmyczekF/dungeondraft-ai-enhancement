@@ -12,25 +12,27 @@ A deliberately tiny protocol so both halves stay trivial to extend.
 ## Request
 
 ```json
-{ "cmd": "place_object", "id": 7, "asset": "objects/chair.png", "x": 100, "y": 200 }
+{ "cmd": "place_object", "asset": "objects/chair.png", "x": 100, "y": 200 }
 ```
 
 - `cmd` (string, required) — the command name.
-- `id` (any, optional) — echoed back verbatim in the response for correlation.
-- everything else — command-specific parameters.
+- `id` is a Dungeondraft element ID only for commands that operate on an
+  existing element. It is not a request correlation ID.
+- Everything else is command-specific parameters. The bridge processes each
+  TCP request in order and does not echo a request correlation ID.
 
 ## Response
 
 Success:
 
 ```json
-{ "ok": true, "result": { "placed": true, "position": [100, 200], "node_id": 42 }, "id": 7 }
+{ "ok": true, "result": { "id": 42, "position": [100, 200] } }
 ```
 
 Error:
 
 ```json
-{ "ok": false, "error": "no map open", "id": 7 }
+{ "ok": false, "error": "no map open" }
 ```
 
 ## Commands
@@ -49,7 +51,7 @@ Coordinates are **woxel** (world pixel) space; map center is in
 | `list_assets` | `category="Objects"`, `search=""`, `limit=100` | `{ category, total, matched, returned, assets[] }` |
 | `list_elements` | `kind="objects"`, `limit=200` | `{ kind, count, elements[] }` |
 | `get_element` | `id` | element descriptor |
-| `list_levels` | — | `{ current_index, levels[] }` |
+| `list_levels` | — | `{ current_index, current_id, levels[] }` |
 
 `kind` ∈ `objects, walls, lights, paths, portals, roofs, texts`. An element
 descriptor is `{ id, kind, position[x,y], rotation(deg), scale, asset? }`.
@@ -79,7 +81,7 @@ node; default color is black.
 | `add_portal` | `asset`, `x?`, `y?`, `closed=false`, `radius=64`, `mount="wall"`, `snap_max=256`, `flip=false`, `fallback_free=true`, `rotation=0` |
 | `add_roof` | `points[[x,y]...]` (the RIDGE line), `asset`, `width=256`, `type=0`, `sorting=0` |
 | `add_text` | `text`, `x?`, `y?`, `size?`, `color?`, `font?` |
-| `place_pattern` | `asset`, `rect=[x,y,w,h]` **or** `points=[[x,y]...]`, `category="Patterns"`, `color?`, `rotation?` |
+| `place_pattern` | `asset`, `rect=[x,y,w,h]` **or** `points=[[x,y]...]`, `category="Patterns"`, `color?`, `rotation?`, `z=-100` |
 | `build_room` | `rect=[x,y,w,h]` **or** `points=[[x,y]...]`, `wall_asset?`, `floor="pattern"\|"terrain"\|"none"`, `floor_asset?`, `floor_category="Simple Tiles"`, `floor_color?`, `floor_slot=1`, `wall_type=0`, `wall_joint=1` → `{ wall_id, floor_id?, points }` |
 
 ### Terrain
@@ -146,20 +148,22 @@ the rect's midpoint; `fit_elements` frames the union of all rects.
 ### History
 
 The bridge keeps its **own** undo/redo stacks (it does not use Dungeondraft's
-`History.CreateCustomRecord`, which is unreliable on 3.4.2 — see notes). Every
-reversible edit (creates, `move_element`, `modify_object`, `fill_terrain`,
-`fill_region`, `paint_terrain`, `paint_path`, `dig_cave`) pushes an op; a fresh
-edit clears the redo stack. Terrain ops snapshot the splat image before/after;
-`dig_cave` snapshots the cave `BitMap` the same way.
+`History.CreateCustomRecord`, which was unreliable in the previously tested
+build — see notes). Supported creates (`place_object`, `draw_wall`, `draw_path`,
+`add_light`, `add_portal`, `add_roof`, `add_text`, `duplicate_object`),
+`move_element`, `modify_object`, the four terrain paint/fill commands,
+`dig_cave`, and `clear_caves` push an op; a fresh recorded edit clears the redo
+stack. Terrain ops snapshot the splat image before/after;
+`dig_cave` and `clear_caves` snapshot the cave `BitMap` the same way.
 
 | cmd | params | result |
 | --- | --- | --- |
 | `undo` | — | `{ undone, kind?, undo_depth? }` / `{ undone: false, reason }` |
 | `redo` | — | `{ redone, kind?, redo_depth? }` / `{ redone: false, reason }` |
 
-`delete_element` is **not** reversible (it frees the node). Levels, selection
-and capture commands are not recorded. This stack is independent of the user's
-Ctrl+Z in Dungeondraft.
+`delete_element` is **not** reversible (it frees the node). `place_pattern`,
+`build_room`, `set_terrain_slot`, levels, selection, and capture commands are
+not recorded. This stack is independent of the user's Ctrl+Z in Dungeondraft.
 
 `color` accepts `"#rrggbb"` / `"rrggbb"` or `[r,g,b]` / `[r,g,b,a]` floats 0..1.
 `type` for walls: 0=auto,1=manual,2=cave; for roofs: 0=gable,1=hip,2=dormer.
@@ -204,10 +208,9 @@ Ctrl+Z in Dungeondraft.
   absolute `z_index` (default `z` = -100, between FloorShapes at -200 and Objects
   at 0). Do **not** use `PatternShapeTool.SetLayer()` on an uncreated index — it
   hard-crashes the mod (GDScript has no try/catch; valid range undocumented).
-- **default tints** — `draw_wall` / `place_pattern` apply the texture's own
-  default color when no `color` is given (walls via `WallTool.GetWallColor(tex)`,
-  patterns by reading back `PatternShapeTool.Color` after setting the texture),
-  rather than `Color(1,1,1)` (white) — which renders bleached/washed-out. Pass
+- **default tints** — `draw_wall` uses the texture's own default color when no
+  `color` is given (via `WallTool.GetWallColor(tex)`), rather than
+  `Color(1,1,1)` (white), which renders bleached/washed-out. Pass
   an explicit `color` to override. **`place_pattern` color caveat:** unlike walls,
   patterns have **no per-texture default** lookup — `PatternShapeTool.Color` is
   *persistent tool state that leaks across calls* (it holds whatever the previous

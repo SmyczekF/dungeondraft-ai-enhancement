@@ -287,7 +287,8 @@ func _snapshot(node) -> Dictionary:
 	return s
 
 
-# Dispatch with a guard so a bad command can never take down the TCP loop.
+# Dispatch known commands. Handlers validate inputs before calling DD methods;
+# GDScript has no exception handler for runtime errors.
 func _safe_dispatch(req : Dictionary) -> Dictionary:
 	var cmd = req.get("cmd", "")
 	match cmd:
@@ -614,10 +615,13 @@ func _get_element(req : Dictionary) -> Dictionary:
 func _list_levels() -> Dictionary:
 	var out := []
 	var levels = Global.World.levels
+	var current_index := -1
 	for i in range(levels.size()):
 		var lv = levels[i]
 		out.append({ "index": i, "id": lv.ID, "label": lv.Label })
-	return _ok({ "current_index": Global.World.CurrentLevelId, "levels": out })
+		if lv.ID == Global.World.CurrentLevelId:
+			current_index = i
+	return _ok({ "current_index": current_index, "current_id": Global.World.CurrentLevelId, "levels": out })
 
 
 # ---------------------------------------------------------------------------
@@ -784,9 +788,6 @@ func _add_portal(req : Dictionary) -> Dictionary:
 	return _ok({ "id": _id(kids[kids.size() - 1]), "kind": "portal", "position": _vec(pos) })
 
 
-# TEMP DEBUG: dump AddPolygon/AddHip/Set arg signatures so we can find the proper
-# CLOSED-roof entry point (Set duplicates the first vertex when we close it,
-# which malforms the top-left hip face). Then build a test roof via AddPolygon.
 # Add a roof. KEY MODEL (learned by probing): Roof.Set(points, width, type) takes
 # the roof's RIDGE LINE (the peak), NOT a footprint to trace — it builds a
 # complete, self-closing roof that slopes down `width` woxels perpendicular to
