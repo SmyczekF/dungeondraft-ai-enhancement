@@ -10,8 +10,7 @@ have Dungeondraft's `preview` marker cleared so native saving can include them.
 
 The Python `save_map` waits for parseable native JSON. By default, it reopens the
 map and compares element counts. MCP map switches release the old listener
-before Dungeondraft reloads the scene and bridge. UI map switches and mod
-reloads transfer the listener to the newest bridge instance.
+before Dungeondraft reloads the scene and bridge.
 
 ## Current verification state
 
@@ -22,19 +21,19 @@ round trip remains **[RETEST]** until the updated mod is reloaded and
 `phase1_smoke.py` passes.
 
 The 2026-10-01 manual New Map attempt showed port 8787 error 22, which Godot
-names `ERR_ALREADY_IN_USE`. The previous bridge opened a new listener each
-time its tool script started, but only released the old one for MCP-requested
-switches. The new bridge hands off its listener during UI-driven map changes
-and mod reloads. Windows also recorded Dungeondraft access-violation crashes;
-the port dialog alone does not prove their native cause, so a fresh manual New
-Map test is still required.
+names `ERR_ALREADY_IN_USE`. The previous bridge released its listener for
+MCP-requested switches, but the UI New Map flow does not use that path. A
+listener handoff through the scene root was attempted. After that change,
+Dungeondraft opened maps but the bridge never bound port 8787, even after Reload
+Mods. The handoff has been reverted pending a working startup test. A bind
+failure now logs without displaying a modal alert.
 
 Later crashes at 22:17 and 22:20 had the same native fault offset as the 22:06
-and 22:07 crashes, after the listener change. The listener handoff addresses
-the port conflict; it has not resolved the crash. The UI New Map action does
-not invoke the bridge's MCP `create_map` handler. Before changing map-creation
-code, isolate whether the crash occurs with no mods, with only this mod, or
-only when another mod is enabled.
+and 22:07 crashes, after the listener change. The user then created a new map
+with no mods and with only this mod enabled without a crash. In the latter
+case, however, the bridge was not listening, so it did not prove that a working
+bridge is safe during UI New Map. The UI action does not invoke the bridge's
+MCP `create_map` handler. Recheck bridge startup before further crash isolation.
 
 The original **MCP Bridge 0.1.0** still appears because a separate installation
 exists in `C:\Program Files\Dungeondraft\mods\dungeondraft-mcp-bridge`.

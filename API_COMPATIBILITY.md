@@ -62,19 +62,19 @@ startup constraint, not an unimplemented bridge command.
 ## Map reload and port ownership
 
 Godot error 22 is `ERR_ALREADY_IN_USE`. The 2026-10-01 port 8787 dialog after
-manual map creation showed the previous bridge listener was still bound when a
-new tool-script instance called `start()`. MCP-requested switches already stop
+manual map creation showed a bind conflict. MCP-requested switches already stop
 the listener before scene reload; UI switches and Reload Mods do not pass
-through that path. The bridge now transfers the listener from the prior script
-instance to the new one using a weak owner reference on the persistent scene
-root. It logs a true external bind conflict without showing a modal dialog.
+through that path. A weak-reference listener handoff was attempted, but the
+bridge then failed to listen after a map loaded or Reload Mods. That handoff
+has been reverted. Bind failures are still logged without a modal dialog.
 Windows also recorded Dungeondraft 1.2.0.1 access-violation crashes during New
 Map attempts. Their exact native cause remains **[RETEST]** until the updated
 bridge is run through a manual New Map sequence.
 
 Two later crashes after the listener change showed the same native fault
 offset (`0x13e07ca`). This does not support treating the port handoff as a
-crash fix. UI New Map does not call the bridge's MCP `create_map` command, so
-its native API path is not implicated by this manual failure. A manual test
-with mods disabled, then with only this bridge enabled, is needed to identify
-which component is involved before changing more creation code.
+crash fix. A subsequent manual New Map test succeeded with no mods and with
+only this mod enabled, but the bridge was not listening in the latter test.
+UI New Map does not call the bridge's MCP `create_map` command, so its native
+API path is not implicated by these manual failures. Recheck startup after
+the handoff revert, then test map creation through MCP separately.

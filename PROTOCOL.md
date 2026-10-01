@@ -95,11 +95,11 @@ node; default color is black.
 
 Creating and opening reload the editor scene. For MCP-requested switches, the
 bridge releases its TCP listener after acknowledging the request. For switches
-started in Dungeondraft's UI or by Reload Mods, a newly started bridge takes
-ownership of the previous instance's listener through a weak owner reference
-on the persistent scene root. This avoids a second bind to port 8787 while
-tool-script instances overlap. An actual bind failure is logged without a
-modal alert so the editor can keep running. The Python MCP tools
+started in Dungeondraft's UI or by Reload Mods, the script attempts a fresh
+bind. A bind failure is logged without a modal alert; the bridge will be
+unavailable until the mod starts again with port 8787 free. A prior listener
+handoff attempt was reverted after the live bridge stopped starting. The Python
+MCP tools
 wait for a new `bridge_instance` and verify path or dimensions. The Python
 `save_map` waits for parseable native JSON and, by default, reopens the
 map and compares per-kind element counts. Reopen clears bridge undo history.
