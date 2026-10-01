@@ -1885,10 +1885,10 @@ func _element_points(node) -> Array:
 	var pts = null
 	for property_name in ["GlobalEditPoints", "GlobalPolygon", "Points", "points"]:
 		pts = node.get(property_name)
-		if pts != null and (typeof(pts) == TYPE_ARRAY or typeof(pts) == TYPE_POOL_VECTOR2_ARRAY) and pts.size() > 0:
+		if pts != null and (typeof(pts) == TYPE_ARRAY or typeof(pts) == TYPE_VECTOR2_ARRAY) and pts.size() > 0:
 			break
 	var out := []
-	if pts != null and (typeof(pts) == TYPE_ARRAY or typeof(pts) == TYPE_POOL_VECTOR2_ARRAY):
+	if pts != null and (typeof(pts) == TYPE_ARRAY or typeof(pts) == TYPE_VECTOR2_ARRAY):
 		for p in pts:
 			if p is Vector2:
 				out.append(_vec(p))
