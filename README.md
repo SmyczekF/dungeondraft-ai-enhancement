@@ -81,7 +81,7 @@ PowerShell on Windows.
    folder.
 2. Set the Mods folder to this repository's `mod/` directory, or copy
    `mod/dungeondraft-mcp-bridge/` into your existing Mods folder.
-3. Enable **Dungeondraft MCP Bridge (SmyczekF)** and disable any older MCP
+3. Enable **Dungeondraft MCP Bridge (Filip Smyczek)** and disable any older MCP
    Bridge mod using port 8787, then open or create a map.
 
 On load you should see in the Dungeondraft log:
@@ -206,6 +206,8 @@ API_COMPATIBILITY.md           installed-version and API audit
 
 ## Credits
 
+Maintained by **Filip Smyczek**. Forked from Brandon Florian's MIT-licensed
+Dungeondraft MCP project; his original copyright notice remains in [LICENSE](LICENSE).
 Built against the [Dungeondraft Modding API](https://megasploot.github.io/DungeondraftModdingAPI/).
 Engine is Godot 3.4.2, so the GDScript uses Godot 3 networking class names.
 
