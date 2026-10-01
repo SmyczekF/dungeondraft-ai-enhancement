@@ -71,3 +71,10 @@ root. It logs a true external bind conflict without showing a modal dialog.
 Windows also recorded Dungeondraft 1.2.0.1 access-violation crashes during New
 Map attempts. Their exact native cause remains **[RETEST]** until the updated
 bridge is run through a manual New Map sequence.
+
+Two later crashes after the listener change showed the same native fault
+offset (`0x13e07ca`). This does not support treating the port handoff as a
+crash fix. UI New Map does not call the bridge's MCP `create_map` command, so
+its native API path is not implicated by this manual failure. A manual test
+with mods disabled, then with only this bridge enabled, is needed to identify
+which component is involved before changing more creation code.

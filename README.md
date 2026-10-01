@@ -81,7 +81,7 @@ PowerShell on Windows.
    folder.
 2. Set the Mods folder to this repository's `mod/` directory, or copy
    `mod/dungeondraft-mcp-bridge/` into your existing Mods folder.
-3. Enable **Dungeondraft MCP Bridge (Filip Smyczek)** (mod ID
+3. Enable **Dungeondraft MCP** (mod ID
    `DungeondraftMCP.Bridge`) and disable any older MCP Bridge mod using port
    8787, then open or create a map. If you enabled this fork before the mod ID
    changed, enable it again in Dungeondraft's Mods screen.

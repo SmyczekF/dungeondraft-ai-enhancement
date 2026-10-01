@@ -29,13 +29,26 @@ and mod reloads. Windows also recorded Dungeondraft access-violation crashes;
 the port dialog alone does not prove their native cause, so a fresh manual New
 Map test is still required.
 
+Later crashes at 22:17 and 22:20 had the same native fault offset as the 22:06
+and 22:07 crashes, after the listener change. The listener handoff addresses
+the port conflict; it has not resolved the crash. The UI New Map action does
+not invoke the bridge's MCP `create_map` handler. Before changing map-creation
+code, isolate whether the crash occurs with no mods, with only this mod, or
+only when another mod is enabled.
+
+The original **MCP Bridge 0.1.0** still appears because a separate installation
+exists in `C:\Program Files\Dungeondraft\mods\dungeondraft-mcp-bridge`.
+Windows denied a move from that protected directory. It is absent from the
+current `active_mods` list, but its listing remains until an administrator
+removes that old folder.
+
 ## Live acceptance check
 
 1. Save any map you wish to keep. Have a disposable map open in Dungeondraft.
    Dungeondraft loads tool mods only after a map opens, so this first load is
    **[PLAN CHANGED]** to a manual action per app session.
 2. Fully restart Dungeondraft so the previous bridge code releases port 8787.
-   Enable the bridge in Mods again if needed: its neutral mod ID is now
+   Enable **Dungeondraft MCP** in Mods again if needed: its neutral mod ID is
    `DungeondraftMCP.Bridge`.
    Open a disposable map, then create a second blank map using the UI. Check
    that no port alert or crash appears. Do not enable an older MCP Bridge mod.
