@@ -56,4 +56,6 @@ If you change code (not just drive the map), the two halves reload differently:
   inputs before calling DD API methods.
 - Parse the full bridge script as Godot 3 GDScript before asking for a mod
   reload. `master` and `tool` are reserved identifiers; using either as a
-  local variable kept the entire Phase 1 script from loading.
+  local variable kept the entire Phase 1 script from loading. The
+  `.github/workflows/gdscript.yml` CI check runs the same parser on pushes and
+  pull requests that change GDScript.

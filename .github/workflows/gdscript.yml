@@ -1,0 +1,25 @@
+name: Validate GDScript
+
+permissions:
+  contents: read
+
+on:
+  push:
+    paths:
+      - "mod/**/*.gd"
+      - ".github/workflows/gdscript.yml"
+  pull_request:
+    paths:
+      - "mod/**/*.gd"
+      - ".github/workflows/gdscript.yml"
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - run: python -m pip install "setuptools<81" "gdtoolkit==3.6.0"
+      - run: gdparse mod/dungeondraft-mcp-bridge/scripts/tools/mcp_bridge.gd
