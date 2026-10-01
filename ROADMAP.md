@@ -40,12 +40,13 @@ These tools already cover tree placement and discovery, terrain paths, walls, ro
 
 ## Phase 0 — Establish a live baseline
 
-- [ ] Run a disposable-map smoke test on Dungeondraft 1.2.0.1 for asset discovery, terrain fill, terrain path, object placement, screenshot, PNG export, and reopening the saved native map.
-- [ ] Record actual output and latency for 10, 50, and 200 object placements; compare individual calls with one persistent client connection. This sets a useful batch size rather than guessing.
-- [ ] Confirm that asset paths and object IDs survive save/reopen, and document any tool behavior that changes after reload.
-- [ ] Update [API_COMPATIBILITY.md](API_COMPATIBILITY.md) with runtime findings. The current file is primarily an API signature review.
+- [x] Run a live smoke test on Dungeondraft 1.2.0.1 for asset discovery, terrain fill, terrain path, object placement, screenshot, and PNG export. See [PHASE0_BASELINE.md](PHASE0_BASELINE.md).
+- [BLOCKED] Save/reopen the native sample map through MCP: the bridge has no create/open/save map commands. Phase 1 must add them before this check can pass.
+- [x] Measure 10, 50, and 200 object placements with one persistent MCP session, and compare with separate MCP sessions. This establishes the current per-object cost; repeat after Phase 2 batch support is implemented.
+- [BLOCKED] Confirm asset paths and object IDs after save/reopen: native save/reopen is unavailable through MCP until Phase 1. The live map's ten objects and IDs were verified before export.
+- [x] Update [API_COMPATIBILITY.md](API_COMPATIBILITY.md) with runtime findings.
 
-**Exit:** A repeatable sample containing a grass field, a center dirt path, and exactly ten trees can be produced, saved, reopened, and counted without Computer Use.
+**Exit:** A repeatable sample containing a grass field, a center dirt path, and exactly ten trees can be produced, saved, reopened, and counted without Computer Use. **[BLOCKED]** Production and count passed; native save/reopen depends on Phase 1. Stop here for review before implementing Phase 1.
 
 ## Phase 1 — Complete the editor lifecycle and inspection API
 
