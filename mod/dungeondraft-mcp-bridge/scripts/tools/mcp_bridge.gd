@@ -486,8 +486,8 @@ func _list_asset_metadata(req : Dictionary) -> Dictionary:
 func _get_map_info() -> Dictionary:
 	var level = Global.World.GetCurrentLevel()
 	var path = str(Global.Editor.get("CurrentMapFile"))
-	var master = _master()
-	var info := {"map_open": level != null, "path": path, "bridge_instance": _instance_id, "dirty": bool(master.get("IsModified")) or _bridge_dirty, "editor_dirty": bool(master.get("IsModified")), "bridge_dirty": _bridge_dirty, "saving": bool(master.get("IsSaving")), "loading": bool(master.get("IsLoadingMap"))}
+	var master_node = _master()
+	var info := {"map_open": level != null, "path": path, "bridge_instance": _instance_id, "dirty": bool(master_node.get("IsModified")) or _bridge_dirty, "editor_dirty": bool(master_node.get("IsModified")), "bridge_dirty": _bridge_dirty, "saving": bool(master_node.get("IsSaving")), "loading": bool(master_node.get("IsLoadingMap"))}
 	if level != null:
 		info["size_tiles"] = [int(Global.World.WoxelDimensions.x / 256), int(Global.World.WoxelDimensions.y / 256)]
 		info["size_woxels"] = _vec(Global.World.WoxelDimensions)
@@ -503,8 +503,8 @@ func _create_map(req : Dictionary) -> Dictionary:
 		return _err("width and height must be 1..100 tiles")
 	if Global.World.GetCurrentLevel() != null and not bool(req.get("discard_current", false)):
 		return _err("a map is open; set discard_current=true to replace it")
-	var master = _master()
-	if bool(master.get("IsSaving")) or bool(master.get("IsLoadingMap")):
+	var master_node = _master()
+	if bool(master_node.get("IsSaving")) or bool(master_node.get("IsLoadingMap")):
 		return _err("editor is busy saving or loading")
 	_pending_switch = {"kind": "create", "width": width, "height": height}
 	_undo_stack = []
@@ -519,8 +519,8 @@ func _open_map(req : Dictionary) -> Dictionary:
 		return _err("path must be an existing absolute .dungeondraft_map file")
 	if Global.World.GetCurrentLevel() != null and not bool(req.get("discard_current", false)):
 		return _err("a map is open; set discard_current=true to replace it")
-	var master = _master()
-	if bool(master.get("IsSaving")) or bool(master.get("IsLoadingMap")):
+	var master_node = _master()
+	if bool(master_node.get("IsSaving")) or bool(master_node.get("IsLoadingMap")):
 		return _err("editor is busy saving or loading")
 	_pending_switch = {"kind": "open", "path": path}
 	_undo_stack = []
@@ -531,8 +531,8 @@ func _open_map(req : Dictionary) -> Dictionary:
 func _save_map(req : Dictionary) -> Dictionary:
 	if Global.World.GetCurrentLevel() == null:
 		return _err("no map open")
-	var master = _master()
-	if bool(master.get("IsSaving")) or bool(master.get("IsLoadingMap")):
+	var master_node = _master()
+	if bool(master_node.get("IsSaving")) or bool(master_node.get("IsLoadingMap")):
 		return _err("editor is busy saving or loading")
 	var path = str(req.get("path", ""))
 	if path == "":
@@ -548,7 +548,7 @@ func _save_map(req : Dictionary) -> Dictionary:
 	Global.Editor.set("CurrentMapFile", path)
 	if str(Global.Editor.get("CurrentMapFile")) != path:
 		return _err("editor did not accept destination path")
-	master.call("Save", path, null)
+	master_node.call("Save", path, null)
 	return _ok({"requested_path": path})
 
 func _get_status() -> Dictionary:
@@ -1039,8 +1039,8 @@ func _place_pattern(req : Dictionary) -> Dictionary:
 	if tex == null: return _err("could not load pattern asset: " + str(req.get("asset")))
 
 	var shapes = level.PatternShapes
-	var tool = Global.Editor.Tools["PatternShapeTool"]
-	tool.Texture = tex
+	var pattern_tool = Global.Editor.Tools["PatternShapeTool"]
+	pattern_tool.Texture = tex
 	# NOTE: layer switching is intentionally not exposed. tool.SetLayer() on an
 	# index DD hasn't created hard-crashes the mod (GDScript has no try/catch)
 	# and the valid index range is undocumented. New shapes go to the tool's
@@ -1064,10 +1064,10 @@ func _place_pattern(req : Dictionary) -> Dictionary:
 		used_default = true
 	if color.a < 0.05:  # guard: never paint an invisible floor
 		color = Color(color.r, color.g, color.b, 1.0)
-	tool.Color = color  # always set, so we don't inherit/leave leaked state
+	pattern_tool.Color = color  # always set, so we don't inherit/leave leaked state
 	var rotation = float(req.get("rotation", 0.0))
-	if tool.get("Rotation") != null:
-		tool.Rotation.value = rotation
+	if pattern_tool.get("Rotation") != null:
+		pattern_tool.Rotation.value = rotation
 
 	var before := shapes.GetShapes().size()
 	var kind : String

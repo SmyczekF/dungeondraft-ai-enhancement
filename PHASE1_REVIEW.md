@@ -23,10 +23,12 @@ round trip remains **[RETEST]** until the updated mod is reloaded and
 The 2026-10-01 manual New Map attempt showed port 8787 error 22, which Godot
 names `ERR_ALREADY_IN_USE`. The previous bridge released its listener for
 MCP-requested switches, but the UI New Map flow does not use that path. A
-listener handoff through the scene root was attempted. After that change,
-Dungeondraft opened maps but the bridge never bound port 8787, even after Reload
-Mods. The handoff has been reverted pending a working startup test. A bind
-failure now logs without displaying a modal alert.
+listener handoff through the scene root was attempted and later reverted because
+the bridge did not start. A Godot 3 syntax check subsequently found the actual
+load failure: Phase 1 used reserved identifiers `master` and `tool` as local
+variables. They have been renamed to `master_node` and `pattern_tool`, and the
+full bridge script now parses. The handoff has not been restored; its need and
+behavior remain unverified. A bind failure logs without a modal alert.
 
 Later crashes at 22:17 and 22:20 had the same native fault offset as the 22:06
 and 22:07 crashes, after the listener change. The user then created a new map

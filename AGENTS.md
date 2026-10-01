@@ -54,3 +54,6 @@ If you change code (not just drive the map), the two halves reload differently:
 - GDScript on Godot 3.4.2 has **no try/catch**: an unhandled runtime error in a
   handler crashes the mod and kills the bridge (full DD restart). Validate
   inputs before calling DD API methods.
+- Parse the full bridge script as Godot 3 GDScript before asking for a mod
+  reload. `master` and `tool` are reserved identifiers; using either as a
+  local variable kept the entire Phase 1 script from loading.
