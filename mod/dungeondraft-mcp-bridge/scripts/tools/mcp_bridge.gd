@@ -21,7 +21,7 @@ var script_class = "tool"
 
 const HOST := "127.0.0.1"
 const PORT := 8787
-const PROTOCOL_VERSION := 16
+const PROTOCOL_VERSION := 17
 
 # Commands that get wrapped in a Dungeondraft undo record (see _record_and_dispatch).
 const CREATE_CMDS := [
@@ -44,7 +44,7 @@ const KIND_NAMES := {
 # kind string -> the Level child collection that holds those nodes.
 const COLLECTIONS := {
 	"objects": "Objects", "walls": "Walls", "lights": "Lights",
-	"paths": "Pathways", "portals": "Portals", "roofs": "Roofs",
+	"paths": "Pathways", "portals": "Portals", "roofs": "Roofs", "patterns": "PatternShapes",
 	"texts": "Texts",
 }
 
@@ -52,6 +52,11 @@ var _server : TCP_Server = null
 var _conns := []         # array of { "peer": StreamPeerTCP, "buf": String }
 var _undo_stack := []    # bridge-managed undo ops (see _build_op / _apply_op)
 var _redo_stack := []
+var _pending_switch := {}
+var _bridge_dirty := false
+var _instance_id := ""
+var _asset_catalog := {}
+var _catalog_version := ""
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +64,7 @@ var _redo_stack := []
 # ---------------------------------------------------------------------------
 
 func start():
+	_instance_id = str(OS.get_ticks_msec()) + "-" + str(randi())
 	_register_tool()
 	_server = TCP_Server.new()
 	var err = _server.listen(PORT, HOST)
@@ -98,6 +104,22 @@ func update(delta : float):
 			nl = c["buf"].find("\n")
 		still_open.append(c)
 	_conns = still_open
+	if not _pending_switch.empty():
+		# A map change reloads the mod. Release the listener before the new copy
+		# starts, after the current request has received its acknowledgement.
+		_server.stop()
+		_server = null
+		call_deferred("_run_pending_switch")
+
+
+func _run_pending_switch():
+	var action = _pending_switch
+	_pending_switch = {}
+	if action["kind"] == "open":
+		Global.Editor.call("ForceOpenMap", action["path"])
+	else:
+		Global.Editor.set("CurrentMapFile", "")
+		_master().call("CreateNewMap", action["width"], action["height"])
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +167,8 @@ func _record_and_dispatch(req : Dictionary) -> Dictionary:
 		if op != null:
 			_undo_stack.append(op)
 			_redo_stack = []   # a fresh edit invalidates the redo branch
+		if cmd in CREATE_CMDS or cmd in TRANSFORM_CMDS or cmd in TERRAIN_CMDS or cmd in CAVE_CMDS or cmd in ["delete_element", "place_pattern", "build_room", "set_terrain_slot", "add_level", "undo", "redo"]:
+			_bridge_dirty = true
 	return result
 
 
@@ -293,8 +317,15 @@ func _safe_dispatch(req : Dictionary) -> Dictionary:
 	var cmd = req.get("cmd", "")
 	match cmd:
 		# --- read / query ---
-		"ping": return _ok({ "pong": true, "protocol": PROTOCOL_VERSION, "engine": Engine.get_version_info() })
+		"ping": return _ok({ "pong": true, "protocol": PROTOCOL_VERSION, "bridge_instance": _instance_id, "engine": Engine.get_version_info() })
 		"get_status": return _get_status()
+		"get_map_info": return _get_map_info()
+		"get_capabilities": return _get_capabilities()
+		"refresh_asset_catalog": return _refresh_asset_catalog()
+		"list_asset_metadata": return _list_asset_metadata(req)
+		"create_map": return _create_map(req)
+		"open_map": return _open_map(req)
+		"save_map": return _save_map(req)
 		"list_asset_categories": return _ok({ "categories": ASSET_CATEGORIES })
 		"list_assets": return _list_assets(req)
 		"list_elements": return _list_elements(req)
@@ -348,11 +379,178 @@ const ASSET_CATEGORIES := [
 	"Patterns", "Patterns Colorable", "Caves", "Materials",
 	"Simple Tiles", "Smart Tiles", "Smart Tiles Double",
 ]
+const SUPPORTED_COMMANDS := [
+	"ping", "get_status", "get_map_info", "get_capabilities", "refresh_asset_catalog",
+	"list_asset_categories", "list_assets", "list_asset_metadata", "list_elements", "get_element", "list_levels",
+	"create_map", "open_map", "save_map", "place_object", "draw_wall", "draw_path", "add_light",
+	"add_portal", "add_roof", "add_text", "place_pattern", "build_room", "set_terrain_slot",
+	"fill_terrain", "fill_region", "paint_terrain", "paint_path", "dig_cave", "clear_caves",
+	"move_element", "modify_object", "duplicate_object", "delete_element", "add_level", "set_level",
+	"screenshot", "export_map", "get_camera", "set_camera", "focus_element", "fit_elements",
+	"undo", "redo", "select_elements", "clear_selection",
+]
+const SEMANTIC_TERMS := [
+	"tree", "oak", "pine", "birch", "aspen", "forest", "bush", "shrub",
+	"rock", "boulder", "grass", "dirt", "mud", "road", "path", "trail",
+	"stream", "river", "water", "wood", "stone", "wall", "roof", "door", "window", "light",
+]
 
 
 # ---------------------------------------------------------------------------
 # Read / query
 # ---------------------------------------------------------------------------
+
+func _master():
+	return Global.Editor.get_tree().get_root().get_node("Master")
+
+
+func _ensure_asset_catalog():
+	if _catalog_version != "":
+		return
+	_asset_catalog = {}
+	var signature := ""
+	for category in ASSET_CATEGORIES:
+		var paths := []
+		var found = Script.GetAssetList(category)
+		if found != null:
+			for path in found:
+				paths.append(str(path))
+		paths.sort()
+		_asset_catalog[category] = paths
+		signature += category + ":" + str(paths.size()) + "\n"
+		for path in paths:
+			signature += path + "\n"
+	var mods := []
+	for mod_id in Script.GetActiveMods():
+		mods.append(str(mod_id))
+	mods.sort()
+	for mod_id in mods:
+		signature += "mod:" + mod_id + "\n"
+	_catalog_version = str(signature.hash())
+
+
+func _get_capabilities() -> Dictionary:
+	_ensure_asset_catalog()
+	var counts := {}
+	for category in ASSET_CATEGORIES:
+		counts[category] = _asset_catalog[category].size()
+	return _ok({"protocol": PROTOCOL_VERSION, "bridge_instance": _instance_id,
+		"dungeondraft_version": str(Global.BuildString), "engine": Engine.get_version_info(),
+		"commands": SUPPORTED_COMMANDS, "asset_catalog_version": _catalog_version,
+		"asset_counts": counts, "active_mods": Script.GetActiveMods()})
+
+
+func _refresh_asset_catalog() -> Dictionary:
+	_catalog_version = ""
+	_ensure_asset_catalog()
+	return _ok({"asset_catalog_version": _catalog_version})
+
+
+func _semantic_tags(path : String) -> Array:
+	var lower = path.to_lower()
+	var tags := []
+	for term in SEMANTIC_TERMS:
+		if lower.find(term) != -1:
+			tags.append(term)
+	return tags
+
+
+func _list_asset_metadata(req : Dictionary) -> Dictionary:
+	_ensure_asset_catalog()
+	var category = str(req.get("category", "Objects"))
+	if not _asset_catalog.has(category):
+		return _err("unknown asset category: " + category)
+	var limit = int(req.get("limit", 100))
+	var offset = int(req.get("offset", 0))
+	if limit < 1 or limit > 200 or offset < 0:
+		return _err("limit must be 1..200 and offset must be nonnegative")
+	var search = str(req.get("search", "")).to_lower()
+	var out := []
+	var matched := 0
+	for path in _asset_catalog[category]:
+		if search != "" and path.to_lower().find(search) == -1:
+			continue
+		if matched >= offset and out.size() < limit:
+			var item := {"category": category, "path": path, "tags": _semantic_tags(path)}
+			var tex = _asset_tex(category, path)
+			if tex != null:
+				var size = tex.get_size()
+				item["texture_pixels"] = _vec(size)
+				if category == "Objects":
+					item["nominal_footprint_woxels"] = _vec(size)
+			out.append(item)
+		matched += 1
+	return _ok({"category": category, "catalog_version": _catalog_version, "total": _asset_catalog[category].size(),
+		"matched": matched, "offset": offset, "limit": limit, "returned": out.size(), "assets": out})
+
+
+func _get_map_info() -> Dictionary:
+	var level = Global.World.GetCurrentLevel()
+	var path = str(Global.Editor.get("CurrentMapFile"))
+	var master = _master()
+	var info := {"map_open": level != null, "path": path, "bridge_instance": _instance_id, "dirty": bool(master.get("IsModified")) or _bridge_dirty, "editor_dirty": bool(master.get("IsModified")), "bridge_dirty": _bridge_dirty, "saving": bool(master.get("IsSaving")), "loading": bool(master.get("IsLoadingMap"))}
+	if level != null:
+		info["size_tiles"] = [int(Global.World.WoxelDimensions.x / 256), int(Global.World.WoxelDimensions.y / 256)]
+		info["size_woxels"] = _vec(Global.World.WoxelDimensions)
+		info["level_id"] = Global.World.CurrentLevelId
+		info["level_count"] = Global.World.levels.size()
+	return _ok(info)
+
+
+func _create_map(req : Dictionary) -> Dictionary:
+	var width = int(req.get("width", 0))
+	var height = int(req.get("height", 0))
+	if width < 1 or height < 1 or width > 100 or height > 100:
+		return _err("width and height must be 1..100 tiles")
+	if Global.World.GetCurrentLevel() != null and not bool(req.get("discard_current", false)):
+		return _err("a map is open; set discard_current=true to replace it")
+	var master = _master()
+	if bool(master.get("IsSaving")) or bool(master.get("IsLoadingMap")):
+		return _err("editor is busy saving or loading")
+	_pending_switch = {"kind": "create", "width": width, "height": height}
+	_undo_stack = []
+	_redo_stack = []
+	return _ok({"accepted": true, "width": width, "height": height})
+
+
+func _open_map(req : Dictionary) -> Dictionary:
+	var path = str(req.get("path", ""))
+	var file = File.new()
+	if not path.is_abs_path() or not path.to_lower().ends_with(".dungeondraft_map") or not file.file_exists(path):
+		return _err("path must be an existing absolute .dungeondraft_map file")
+	if Global.World.GetCurrentLevel() != null and not bool(req.get("discard_current", false)):
+		return _err("a map is open; set discard_current=true to replace it")
+	var master = _master()
+	if bool(master.get("IsSaving")) or bool(master.get("IsLoadingMap")):
+		return _err("editor is busy saving or loading")
+	_pending_switch = {"kind": "open", "path": path}
+	_undo_stack = []
+	_redo_stack = []
+	return _ok({"requested_path": path})
+
+
+func _save_map(req : Dictionary) -> Dictionary:
+	if Global.World.GetCurrentLevel() == null:
+		return _err("no map open")
+	var master = _master()
+	if bool(master.get("IsSaving")) or bool(master.get("IsLoadingMap")):
+		return _err("editor is busy saving or loading")
+	var path = str(req.get("path", ""))
+	if path == "":
+		path = str(Global.Editor.get("CurrentMapFile"))
+	if not path.is_abs_path() or not path.to_lower().ends_with(".dungeondraft_map"):
+		return _err("path must be an absolute .dungeondraft_map file")
+	var dir = Directory.new()
+	if not dir.dir_exists(path.get_base_dir()):
+		return _err("destination directory does not exist")
+	var file = File.new()
+	if file.file_exists(path) and not bool(req.get("overwrite", false)):
+		return _err("destination exists; set overwrite=true to replace it")
+	Global.Editor.set("CurrentMapFile", path)
+	if str(Global.Editor.get("CurrentMapFile")) != path:
+		return _err("editor did not accept destination path")
+	master.call("Save", path, null)
+	return _ok({"requested_path": path})
 
 func _get_status() -> Dictionary:
 	var level = Global.World.GetCurrentLevel()
@@ -373,21 +571,26 @@ func _get_status() -> Dictionary:
 
 
 func _list_assets(req : Dictionary) -> Dictionary:
-	var category = req.get("category", "Objects")
+	_ensure_asset_catalog()
+	var category = str(req.get("category", "Objects"))
 	var search = str(req.get("search", "")).to_lower()
 	var limit = int(req.get("limit", 100))
-	var all = Script.GetAssetList(category)
-	if all == null:
+	var offset = int(req.get("offset", 0))
+	if limit < 1 or limit > 500 or offset < 0:
+		return _err("limit must be 1..500 and offset must be nonnegative")
+	if not _asset_catalog.has(category):
 		return _err("unknown asset category: " + str(category))
+	var all = _asset_catalog[category]
 	var out := []
 	var matched := 0
 	for path in all:
 		if search != "" and str(path).to_lower().find(search) == -1:
 			continue
-		matched += 1
-		if out.size() < limit:
+		if matched >= offset and out.size() < limit:
 			out.append(path)
-	return _ok({ "category": category, "total": all.size(), "matched": matched, "returned": out.size(), "assets": out })
+		matched += 1
+	return _ok({ "category": category, "catalog_version": _catalog_version, "total": all.size(), "matched": matched,
+		"offset": offset, "limit": limit, "returned": out.size(), "assets": out })
 
 
 # Resolve the cave editing target: enable the CaveBrush (the UI path that wires
@@ -536,7 +739,11 @@ func _list_elements(req : Dictionary) -> Dictionary:
 	if not COLLECTIONS.has(kind):
 		return _err("unknown kind '%s' (one of: %s)" % [kind, COLLECTIONS.keys()])
 	var limit = int(req.get("limit", 200))
+	var offset = int(req.get("offset", 0))
+	if limit < 1 or limit > 500 or offset < 0:
+		return _err("limit must be 1..500 and offset must be nonnegative")
 	var out := []
+	var total := 0
 	# Wall-mounted portals (doors/windows) live inside each wall's `Portals`
 	# array, NOT in level.Portals — so listing "portals" must also walk the
 	# walls, or hand-placed doors are invisible to query.
@@ -546,14 +753,14 @@ func _list_elements(req : Dictionary) -> Dictionary:
 			if wp == null:
 				continue
 			for portal in wp:
-				if out.size() >= limit:
-					break
-				out.append(_describe_wall_portal(portal, wall))
+				if total >= offset and out.size() < limit:
+					out.append(_describe_wall_portal(portal, wall))
+				total += 1
 	for node in _collection(level, kind).get_children():
-		if out.size() >= limit:
-			break
-		out.append(_describe(node))
-	return _ok({ "kind": kind, "count": out.size(), "elements": out })
+		if total >= offset and out.size() < limit:
+			out.append(_describe(node))
+		total += 1
+	return _ok({ "kind": kind, "offset": offset, "limit": limit, "total": total, "count": out.size(), "elements": out })
 
 
 # Describe a wall-mounted portal (a door/window living in a wall's Portals
@@ -587,6 +794,9 @@ func _describe_wall_portal(portal, wall) -> Dictionary:
 	var r = portal.get("Radius")
 	if r != null:
 		d["radius"] = float(r)
+		d["bounds"] = [_vec(pos - Vector2(r, r)), _vec(pos + Vector2(r, r))]
+	if portal is Node2D:
+		d["layer"] = portal.z_index
 	var tex = portal.get("Texture")
 	if tex != null and tex is Texture:
 		d["asset"] = tex.resource_path
@@ -641,6 +851,8 @@ func _place_object(req : Dictionary) -> Dictionary:
 	prop.rotation = deg2rad(float(req.get("rotation", 0.0)))
 	if req.has("color") and prop.has_method("SetCustomColor"):
 		prop.SetCustomColor(_color(req["color"], Color(1, 1, 1)))
+	prop.set_meta("preview", false)
+	level.Objects.AddToSearchTable(prop, int(req.get("sorting", 0)) == 1)
 	return _ok({ "id": _id(prop), "position": _vec(prop.position) })
 
 
@@ -691,6 +903,7 @@ func _draw_path(req : Dictionary) -> Dictionary:
 	if req.has("width"):
 		path.SetWidthScale(float(req["width"]))
 	path.UpdateGradient()
+	path.set_meta("preview", false)
 	return _ok({ "id": _id(path), "point_count": pts.size() })
 
 
@@ -706,6 +919,7 @@ func _add_light(req : Dictionary) -> Dictionary:
 	var tex = _asset_tex("Lights", req.get("asset", ""))
 	if tex != null:
 		light.texture = tex
+	light.set_meta("preview", false)
 	return _ok({ "id": _id(light), "position": _vec(light.position) })
 
 
@@ -1352,6 +1566,8 @@ func _duplicate_object(req : Dictionary) -> Dictionary:
 	prop.position = src.position + Vector2(float(req.get("dx", 64.0)), float(req.get("dy", 0.0)))
 	prop.scale = src.scale
 	prop.rotation = src.rotation
+	prop.set_meta("preview", false)
+	level.Objects.AddToSearchTable(prop, false)
 	return _ok({ "id": _id(prop), "position": _vec(prop.position) })
 
 
@@ -1642,6 +1858,9 @@ func _describe(node) -> Dictionary:
 		var fname = node.get("fontName")
 		if fname != null and str(fname) != "":
 			td["font"] = str(fname)
+		var text_rect = _element_rect(node)
+		if text_rect != null:
+			td["bounds"] = [_vec(text_rect.position), _vec(text_rect.end)]
 		return td
 	var stool = Global.Editor.Tools["SelectTool"]
 	var t = stool.GetSelectableType(node)
@@ -1650,10 +1869,31 @@ func _describe(node) -> Dictionary:
 		d["position"] = _vec(node.position)
 		d["rotation"] = rad2deg(node.rotation)
 		d["scale"] = node.scale.x
+		d["layer"] = int(node.call("GetLayer")) if node.has_method("GetLayer") else node.z_index
+	var rect = _element_rect(node)
+	if rect != null:
+		d["bounds"] = [_vec(rect.position), _vec(rect.end)]
+	var pts = _element_points(node)
+	if not pts.empty():
+		d["points"] = pts
 	var tex_path = _texture_path(node, t)
 	if tex_path != "":
 		d["asset"] = tex_path
 	return d
+
+
+func _element_points(node) -> Array:
+	var pts = null
+	for property_name in ["GlobalEditPoints", "GlobalPolygon", "Points", "points"]:
+		pts = node.get(property_name)
+		if pts != null and (typeof(pts) == TYPE_ARRAY or typeof(pts) == TYPE_POOL_VECTOR2_ARRAY) and pts.size() > 0:
+			break
+	var out := []
+	if pts != null and (typeof(pts) == TYPE_ARRAY or typeof(pts) == TYPE_POOL_VECTOR2_ARRAY):
+		for p in pts:
+			if p is Vector2:
+				out.append(_vec(p))
+	return out
 
 
 func _texture_path(node, kind : int) -> String:
@@ -1665,6 +1905,8 @@ func _texture_path(node, kind : int) -> String:
 			tex = node.get_texture()
 	elif kind == 8:
 		tex = node.get("TilesTexture")
+	elif kind == 7:
+		tex = node.get("texture")
 	if tex != null and tex is Texture:
 		return tex.resource_path
 	return ""

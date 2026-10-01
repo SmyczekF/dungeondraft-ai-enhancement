@@ -12,8 +12,10 @@ list_assets(category, search=...).
 from __future__ import annotations
 
 import os
+import json
 import tempfile
 import time
+from pathlib import Path
 from typing import Optional
 
 from mcp.server.mcpserver import MCPServer, Image
@@ -41,18 +43,69 @@ _SCREENSHOT_PATH = os.path.join(tempfile.gettempdir(), "dd_mcp_screenshot.png")
 _EXPORT_PATH = os.path.join(tempfile.gettempdir(), "dd_mcp_export.png")
 
 
-def _wait_for_file(path: str, timeout: float = 60.0) -> None:
+def _wait_for_file(path: str, timeout: float = 60.0, previous_mtime_ns: int | None = None) -> None:
     """Block until `path` exists with a non-zero size that is stable across polls."""
     deadline = time.time() + timeout
     last = -1
     while time.time() < deadline:
         if os.path.exists(path):
             size = os.path.getsize(path)
-            if size > 0 and size == last:
+            changed = previous_mtime_ns is None or os.stat(path).st_mtime_ns != previous_mtime_ns
+            if size > 0 and size == last and changed:
                 return
             last = size
         time.sleep(0.3)
     raise BridgeError(f"render did not complete within {timeout:.0f}s ({path})")
+
+
+def _wait_for_native_json(path: Path, previous_mtime_ns: int | None, timeout: float = 60.0) -> dict:
+    """Wait until Dungeondraft has finished writing a parseable native map."""
+    deadline = time.monotonic() + timeout
+    last_error = "file has not been written"
+    while time.monotonic() < deadline:
+        try:
+            stat = path.stat()
+            if stat.st_size and (previous_mtime_ns is None or stat.st_mtime_ns != previous_mtime_ns):
+                with path.open("r", encoding="utf-8-sig") as file:
+                    native = json.load(file)
+                if isinstance(native.get("world", {}).get("levels"), dict):
+                    return native
+                last_error = "missing world.levels"
+        except (OSError, ValueError, UnicodeError, AttributeError) as exc:
+            last_error = str(exc)
+        time.sleep(0.3)
+    raise BridgeError(f"native map did not finish saving within {timeout:.0f}s ({path}): {last_error}")
+
+
+def _wait_for_map(*, previous_instance: str, path: str | None = None, size: tuple[int, int] | None = None, timeout: float = 90.0) -> dict:
+    """Wait through Dungeondraft's scene/mod reload and return the ready map."""
+    deadline = time.monotonic() + timeout
+    last_error = "map did not become ready"
+    while time.monotonic() < deadline:
+        try:
+            info = bridge.request("get_map_info")
+            if info.get("map_open") and not info.get("loading") and info.get("bridge_instance") != previous_instance:
+                if path is not None and os.path.normcase(info.get("path", "")) != os.path.normcase(path):
+                    last_error = f"loaded unexpected path: {info.get('path')}"
+                elif size is not None and info.get("size_tiles") != list(size):
+                    last_error = f"loaded unexpected size: {info.get('size_tiles')}"
+                else:
+                    return info
+        except BridgeError as exc:
+            last_error = str(exc)
+        time.sleep(0.4)
+    raise BridgeError(f"Dungeondraft map load timed out: {last_error}")
+
+
+def _native_path(path: str, *, must_exist: bool = False) -> Path:
+    target = Path(path)
+    if not target.is_absolute() or target.suffix.lower() != ".dungeondraft_map":
+        raise BridgeError("path must be an absolute .dungeondraft_map file")
+    if must_exist and not target.is_file():
+        raise BridgeError(f"map file does not exist: {target}")
+    if not target.parent.is_dir():
+        raise BridgeError(f"destination directory does not exist: {target.parent}")
+    return target
 
 
 # --------------------------------------------------------------------------
@@ -75,30 +128,111 @@ def get_status() -> dict:
 
 
 @mcp.tool()
+def get_map_info() -> dict:
+    """Get native map path, size in tiles and woxels, active level, and editor load/save/dirty state."""
+    return bridge.request("get_map_info")
+
+
+@mcp.tool()
+def get_capabilities() -> dict:
+    """Report bridge protocol, Dungeondraft build, commands, mods, and asset catalog version/counts."""
+    return bridge.request("get_capabilities")
+
+
+@mcp.tool()
+def create_map(width: int, height: int, discard_current: bool = False) -> dict:
+    """Create a new blank map of 1..100 tiles per side. Explicitly allow replacement of an open map."""
+    if not 1 <= width <= 100 or not 1 <= height <= 100:
+        raise BridgeError("width and height must be 1..100 tiles")
+    previous_instance = bridge.request("get_map_info")["bridge_instance"]
+    bridge.request("create_map", width=width, height=height, discard_current=discard_current)
+    return _wait_for_map(previous_instance=previous_instance, size=(width, height))
+
+
+@mcp.tool()
+def open_map(path: str, discard_current: bool = False) -> dict:
+    """Open an existing native map. Explicitly allow replacement of an open map."""
+    target = _native_path(path, must_exist=True)
+    previous_instance = bridge.request("get_map_info")["bridge_instance"]
+    bridge.request("open_map", path=str(target), discard_current=discard_current)
+    return _wait_for_map(previous_instance=previous_instance, path=str(target))
+
+
+@mcp.tool()
+def save_map(path: str = "", overwrite: bool = False, verify_reopen: bool = True) -> dict:
+    """Save the native map and verify its JSON; by default reopen it and confirm the element counts.
+
+    When path is omitted, save over the current native file. For a new path, set
+    overwrite=True only when replacing an existing file. Reopening reloads the
+    Dungeondraft mod and clears the bridge undo history.
+    """
+    if not path:
+        info = bridge.request("get_map_info")
+        path = info.get("path", "")
+        overwrite = True
+    target = _native_path(path)
+    if target.exists() and not overwrite:
+        raise BridgeError(f"destination exists; set overwrite=True to replace it: {target}")
+    previous_mtime_ns = target.stat().st_mtime_ns if target.exists() else None
+    before = bridge.request("get_status")
+    if not before.get("map_open"):
+        raise BridgeError("no map open")
+    bridge.request("save_map", path=str(target), overwrite=overwrite)
+    _wait_for_native_json(target, previous_mtime_ns)
+    result = {"path": str(target), "bytes": target.stat().st_size, "valid_native_json": True}
+    if verify_reopen:
+        previous_instance = bridge.request("get_map_info")["bridge_instance"]
+        bridge.request("open_map", path=str(target), discard_current=True)
+        result["map"] = _wait_for_map(previous_instance=previous_instance, path=str(target))
+        after = bridge.request("get_status")
+        if after.get("counts") != before.get("counts"):
+            raise BridgeError(f"map reopened with different element counts: before={before.get('counts')}, after={after.get('counts')}")
+        result["counts_verified"] = after.get("counts")
+    return result
+
+
+@mcp.tool()
 def list_asset_categories() -> dict:
     """List the valid asset category names (Objects, Walls, Paths, Terrain, Lights, Portals, Roofs, ...)."""
     return bridge.request("list_asset_categories")
 
 
 @mcp.tool()
-def list_assets(category: str = "Objects", search: str = "", limit: int = 100) -> dict:
+def list_assets(category: str = "Objects", search: str = "", offset: int = 0, limit: int = 100) -> dict:
     """List asset paths in a category, optionally filtered by a case-insensitive substring.
 
     category: e.g. 'Objects', 'Walls', 'Paths', 'Terrain', 'Lights', 'Portals', 'Roofs'.
     search: substring to match against the asset path (e.g. 'chair', 'door', 'grass').
     Pass a returned path as the 'asset' argument to the create tools.
     """
-    return bridge.request("list_assets", category=category, search=search, limit=limit)
+    return bridge.request("list_assets", category=category, search=search, offset=offset, limit=limit)
 
 
 @mcp.tool()
-def list_elements(kind: str = "objects", limit: int = 200) -> dict:
-    """List elements currently on the map with their ids, positions, rotation, scale and asset.
+def list_asset_metadata(category: str = "Objects", search: str = "", offset: int = 0, limit: int = 100) -> dict:
+    """Page through asset paths with texture dimensions and filename-derived semantic tags.
 
-    kind: one of 'objects', 'walls', 'lights', 'paths', 'portals', 'roofs', 'texts'.
+    Object nominal footprint is the unscaled texture size in woxels; rotation,
+    transparency and in-app settings can change its effective collision extent.
+    Tags describe filenames only and are not gameplay semantics.
+    """
+    return bridge.request("list_asset_metadata", category=category, search=search, offset=offset, limit=limit)
+
+
+@mcp.tool()
+def refresh_asset_catalog() -> dict:
+    """Rebuild cached asset paths after asset packs change; mod reloads also clear the cache."""
+    return bridge.request("refresh_asset_catalog")
+
+
+@mcp.tool()
+def list_elements(kind: str = "objects", offset: int = 0, limit: int = 200) -> dict:
+    """Page through elements with total count, world bounds, points, layer and asset.
+
+    kind: one of 'objects', 'walls', 'lights', 'paths', 'portals', 'roofs', 'patterns', 'texts'.
     Use the returned ids with move_element / modify_object / delete_element / select_elements.
     """
-    return bridge.request("list_elements", kind=kind, limit=limit)
+    return bridge.request("list_elements", kind=kind, offset=offset, limit=limit)
 
 
 @mcp.tool()
