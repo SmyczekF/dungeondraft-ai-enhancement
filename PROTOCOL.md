@@ -40,21 +40,36 @@ Error:
 Coordinates are **woxel** (world pixel) space; map center is in
 `get_status -> map_center`. Every element is referenced by integer `id`
 (== Dungeondraft `node_id`); create commands return it, query commands list it.
+Protocol version 17 adds native map lifecycle and paged inspection. Dungeondraft
+loads mod scripts after the first map opens, so the title screen has no bridge.
 
 ### Read / query
 
 | cmd | params | result |
 | --- | --- | --- |
-| `ping` | — | `{ pong, protocol, engine }` |
+| `ping` | — | `{ pong, protocol, bridge_instance, engine }` |
 | `get_status` | — | `{ map_open, level_id, level_count, map_size_woxels, map_center, counts{}, active_tool }` |
+| `get_map_info` | — | `{ map_open, path, size_tiles?, size_woxels?, level_id?, level_count?, dirty, editor_dirty, bridge_dirty, saving, loading, bridge_instance }` |
+| `get_capabilities` | — | `{ protocol, bridge_instance, dungeondraft_version, engine, commands[], asset_catalog_version, asset_counts{}, active_mods[] }` |
 | `list_asset_categories` | — | `{ categories[] }` |
-| `list_assets` | `category="Objects"`, `search=""`, `limit=100` | `{ category, total, matched, returned, assets[] }` |
-| `list_elements` | `kind="objects"`, `limit=200` | `{ kind, count, elements[] }` |
+| `list_assets` | `category="Objects"`, `search=""`, `offset=0`, `limit=100` | `{ category, catalog_version, total, matched, offset, limit, returned, assets[] }` |
+| `list_asset_metadata` | `category="Objects"`, `search=""`, `offset=0`, `limit=100` | Same pagination; asset entries include `path`, `category`, `tags[]`, `texture_pixels?`, `nominal_footprint_woxels?` |
+| `refresh_asset_catalog` | — | `{ asset_catalog_version }` |
+| `list_elements` | `kind="objects"`, `offset=0`, `limit=200` | `{ kind, offset, limit, total, count, elements[] }` |
 | `get_element` | `id` | element descriptor |
 | `list_levels` | — | `{ current_index, current_id, levels[] }` |
 
-`kind` ∈ `objects, walls, lights, paths, portals, roofs, texts`. An element
-descriptor is `{ id, kind, position[x,y], rotation(deg), scale, asset? }`.
+`kind` ∈ `objects, walls, lights, paths, portals, roofs, patterns, texts`.
+Descriptors include `id`, `kind`, `position`, `rotation`, `scale`, `asset?`,
+`layer?`, `bounds?` as `[[minX,minY],[maxX,maxY]]`, and `points?` in world
+woxels where the native element exposes them. Bounds are visual extents, not
+guaranteed movement collision. `limit` is capped at 500 for elements and basic
+asset paths, 200 for metadata. Metadata tags come from filenames only; texture
+dimensions are pixels and an object's nominal unscaled footprint.
+
+The asset catalog caches sorted paths per category. Reloading the mod resets it;
+`refresh_asset_catalog` rebuilds it after asset pack changes. The catalog
+version hashes paths and active mod IDs, so clients can invalidate selections.
 
 `portals` includes **wall-mounted** portals (doors/windows), which live inside
 each wall's `Portals` array rather than `level.Portals` — `list_elements` walks
@@ -64,11 +79,28 @@ where `position` is the door's gap center and `normal` is the outward unit
 vector (perpendicular to the wall, pointing out of the room). To route a road to
 a door, draw to `position`; offset along `normal` by a tile or so to stop just
 outside the threshold. `get_element` on a door id returns the same descriptor.
-Text elements describe as `{ id, kind:"text", position[x,y], text, size?,
+Text elements describe as `{ id, kind:"text", position[x,y], bounds?, text, size?,
 color?, font? }` (a DD Text extends LineEdit, so it has no `scale`/`rotation`/
 `asset` and is positioned by `rect_position`). Font name+size are applied
 together via `SetFont` because `SetFontSize` alone doesn't stick on a fresh
 node; default color is black.
+
+### Native map lifecycle
+
+| cmd | params | result |
+| --- | --- | --- |
+| `create_map` | `width`, `height` in tiles (1–100), `discard_current=false` | `{ accepted, width, height }` |
+| `open_map` | absolute existing `.dungeondraft_map` `path`, `discard_current=false` | `{ requested_path }` |
+| `save_map` | absolute `.dungeondraft_map` `path?`, `overwrite=false` | `{ requested_path }` |
+
+Creating and opening reload the editor scene. The bridge releases its TCP
+listener before switching, and a new bridge instance starts when the map is
+ready. The raw bridge response acknowledges the request; the Python MCP tools
+wait for a new `bridge_instance` and verify path or dimensions. The Python
+`save_map` waits for parseable native JSON and, by default, reopens the
+map and compares per-kind element counts. Reopen clears bridge undo history.
+Use `discard_current=true` only after saving any work to retain. `dirty`
+combines Dungeondraft's editor flag with edits tracked by the bridge.
 
 ### Create (each returns `{ id, ... }`)
 
@@ -86,8 +118,8 @@ node; default color is black.
 
 ### Terrain
 
-`fill_region` rasterizes a woxel-space rectangle or polygon into a texture-space
-alpha brush and stamps it once via `Terrain.Paint`, so it fills only inside the
+`fill_region` rasterizes a woxel-space rectangle or polygon into the terrain
+splat image, so it fills only inside the
 shape (e.g. one room's floor) rather than the whole level like `fill_terrain`.
 It is undo-recorded like the other terrain ops.
 

@@ -4,8 +4,9 @@ Run from the repository venv with a disposable map open in Dungeondraft:
 
     .venv\Scripts\python.exe phase0_baseline.py --output-dir <directory>
 
-Temporary benchmark objects are deleted. The final ten-tree sample remains
-open in the editor; the bridge cannot save a native map yet.
+Temporary benchmark objects are deleted. This historical Phase 0 runner leaves
+the ten-tree sample in the editor and does not save a native map. Use
+phase1_smoke.py for native save/reopen verification.
 """
 
 from __future__ import annotations

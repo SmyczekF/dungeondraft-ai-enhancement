@@ -10,11 +10,12 @@ notes.
 
 The tools talk to a live Dungeondraft, not this repo. They only work when:
 
-1. **Dungeondraft is running** with the **MCP Bridge mod enabled**, and
-2. **a map is open**.
+1. **Dungeondraft is running** with the forked **MCP Bridge mod enabled**, and
+2. **a map is open**. Dungeondraft loads tool mods only after a map loads, so a
+   human must open or create the first map after starting the app.
 
 If both aren't true, calls fail (connection refused, or `"no map open"`).
-**Verify first:** call `ping` (expect `pong` + protocol version 16), then
+**Verify first:** call `ping` (expect `pong` + protocol version 17), then
 `get_status` (expect `map_open: true` and a `map_center`). If `ping` fails, the
 mod isn't loaded or DD isn't running — ask the user to start it; don't retry
 blindly.
@@ -25,8 +26,14 @@ blindly.
   `get_status`. There are 256 woxels per tile.
 - Every element has an integer `id`; create calls return it, `list_elements` /
   `get_element` report it. Feed ids back into move/modify/delete.
-- Discover assets with `list_assets` (it takes a `category` and a substring
-  `search`); list categories with `list_asset_categories`.
+- Discover assets with `list_assets` or `list_asset_metadata` (category,
+  substring search, offset, limit); list categories with `list_asset_categories`.
+- Use `get_capabilities` before planning edits. It reports commands, the live
+  Dungeondraft build, active mods and catalog version. `refresh_asset_catalog`
+  rebuilds the cache after asset packs change.
+- `create_map` and `open_map` replace the current map only with
+  `discard_current=true`. Save first if needed. `save_map` reopens by default to
+  verify native durability, which clears the bridge undo history.
 - **Look at your work**: `screenshot` (current view) and the camera tools
   (`set_camera`, `focus_element`, `fit_elements`) return/aim the view so you can
   inspect what you built and iterate. Use them.

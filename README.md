@@ -26,15 +26,23 @@ forwards calls as JSON. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
 
 > **Compatibility:** This version targets the installed Windows build,
 > **Dungeondraft 1.2.0.1**. Documented API calls were checked against the
-> published modding reference, but the bridge has not been exercised in 1.2.0.1
-> with a map open. See [API_COMPATIBILITY.md](API_COMPATIBILITY.md) for the audit.
-> It exposes 39 tools across query, creation, terrain, editing, levels,
+> published modding reference and a live 1.2.0.1 session. The Phase 1 additions
+> require a final live reload and durability check. See [API_COMPATIBILITY.md](API_COMPATIBILITY.md).
+> It exposes 46 tools across lifecycle, inspection, creation, terrain, editing, levels,
 > selection, capture, camera, and undo.
+
+Phase 1's live acceptance procedure and current verification status are in
+[PHASE1_REVIEW.md](PHASE1_REVIEW.md).
 
 ## What the AI can do
 
 - **Inspect:** `get_status`, `list_levels`, `list_elements`, `get_element`,
-  `list_asset_categories`, `list_assets` (with substring search).
+  `get_map_info`, `get_capabilities`, `list_asset_categories`, `list_assets`,
+  `list_asset_metadata` (paged paths, dimensions and filename tags).
+- **Map files:** `create_map`, `open_map`, `save_map` manage native editable maps.
+  `save_map` checks the file and, by default, reopens it to verify element counts.
+  Dungeondraft loads mod scripts only after a map opens, so open or create the
+  first map manually after launching the app. Further map switches can use MCP.
 - **Create:** `place_object`, `draw_wall`, `draw_path`, `add_light`,
   `add_portal`, `add_roof`, `add_text`, `place_pattern` (tiled floor shapes —
   wood planks, tile, brick — rendered below objects), `build_room` (a wall loop
@@ -71,13 +79,15 @@ PowerShell on Windows.
 
 1. In Dungeondraft's title screen, open **Mods** and note (or set) your mods
    folder.
-2. Copy `mod/dungeondraft-mcp-bridge/` into that folder.
-3. Enable **MCP Bridge** in the mod list, then open or create a map.
+2. Set the Mods folder to this repository's `mod/` directory, or copy
+   `mod/dungeondraft-mcp-bridge/` into your existing Mods folder.
+3. Enable **Dungeondraft MCP Bridge (SmyczekF)** and disable any older MCP
+   Bridge mod using port 8787, then open or create a map.
 
 On load you should see in the Dungeondraft log:
 
 ```
-[mcp-bridge] listening on 127.0.0.1:8787 (protocol v16)
+[mcp-bridge] listening on 127.0.0.1:8787 (protocol v17)
 ```
 
 ### 2. Install the MCP server
