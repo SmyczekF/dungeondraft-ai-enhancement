@@ -58,3 +58,16 @@ loads tool mods only after a map finishes loading. **[PLAN CHANGED]** A user mus
 open or create the first map after launching Dungeondraft; subsequent map
 creation and opening can use MCP once the bridge is active. This is an app
 startup constraint, not an unimplemented bridge command.
+
+## Map reload and port ownership
+
+Godot error 22 is `ERR_ALREADY_IN_USE`. The 2026-10-01 port 8787 dialog after
+manual map creation showed the previous bridge listener was still bound when a
+new tool-script instance called `start()`. MCP-requested switches already stop
+the listener before scene reload; UI switches and Reload Mods do not pass
+through that path. The bridge now transfers the listener from the prior script
+instance to the new one using a weak owner reference on the persistent scene
+root. It logs a true external bind conflict without showing a modal dialog.
+Windows also recorded Dungeondraft 1.2.0.1 access-violation crashes during New
+Map attempts. Their exact native cause remains **[RETEST]** until the updated
+bridge is run through a manual New Map sequence.

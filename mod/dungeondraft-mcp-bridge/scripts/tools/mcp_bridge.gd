@@ -22,6 +22,7 @@ var script_class = "tool"
 const HOST := "127.0.0.1"
 const PORT := 8787
 const PROTOCOL_VERSION := 17
+const LISTENER_OWNER_KEY := "SmyczekF.DungeondraftMCPBridge.listener_owner"
 
 # Commands that get wrapped in a Dungeondraft undo record (see _record_and_dispatch).
 const CREATE_CMDS := [
@@ -66,14 +67,31 @@ var _catalog_version := ""
 func start():
 	_instance_id = str(OS.get_ticks_msec()) + "-" + str(randi())
 	_register_tool()
-	_server = TCP_Server.new()
-	var err = _server.listen(PORT, HOST)
-	if err == OK:
-		print("[mcp-bridge] listening on %s:%d (protocol v%d)" % [HOST, PORT, PROTOCOL_VERSION])
-	else:
-		_server = null
-		print("[mcp-bridge] FAILED to listen on %s:%d (error %d)" % [HOST, PORT, err])
-		OS.alert("MCP bridge could not open port %d (error %d).\nIs it already in use?" % [PORT, err], "MCP Bridge")
+	# Tool scripts can overlap while Dungeondraft reloads a map or its mods.
+	# Keep exactly one listener and move its ownership to the new script instance.
+	var root = Global.Editor.get_tree().get_root()
+	if root.has_meta(LISTENER_OWNER_KEY):
+		var prior_ref = root.get_meta(LISTENER_OWNER_KEY)
+		if prior_ref is WeakRef:
+			var prior = prior_ref.get_ref()
+			if prior != null and prior != self and prior.has_method("_handoff_listener"):
+				_server = prior._handoff_listener()
+	if _server == null or not _server.is_listening():
+		_server = TCP_Server.new()
+		var err = _server.listen(PORT, HOST)
+		if err != OK:
+			_server = null
+			print("[mcp-bridge] FAILED to listen on %s:%d (error %d); bridge unavailable" % [HOST, PORT, err])
+			return
+	root.set_meta(LISTENER_OWNER_KEY, weakref(self))
+	print("[mcp-bridge] listening on %s:%d (protocol v%d)" % [HOST, PORT, PROTOCOL_VERSION])
+
+
+func _handoff_listener():
+	var listener = _server
+	_server = null
+	_conns = []
+	return listener
 
 
 func update(delta : float):

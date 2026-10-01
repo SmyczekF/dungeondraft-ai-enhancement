@@ -93,9 +93,13 @@ node; default color is black.
 | `open_map` | absolute existing `.dungeondraft_map` `path`, `discard_current=false` | `{ requested_path }` |
 | `save_map` | absolute `.dungeondraft_map` `path?`, `overwrite=false` | `{ requested_path }` |
 
-Creating and opening reload the editor scene. The bridge releases its TCP
-listener before switching, and a new bridge instance starts when the map is
-ready. The raw bridge response acknowledges the request; the Python MCP tools
+Creating and opening reload the editor scene. For MCP-requested switches, the
+bridge releases its TCP listener after acknowledging the request. For switches
+started in Dungeondraft's UI or by Reload Mods, a newly started bridge takes
+ownership of the previous instance's listener through a weak owner reference
+on the persistent scene root. This avoids a second bind to port 8787 while
+tool-script instances overlap. An actual bind failure is logged without a
+modal alert so the editor can keep running. The Python MCP tools
 wait for a new `bridge_instance` and verify path or dimensions. The Python
 `save_map` waits for parseable native JSON and, by default, reopens the
 map and compares per-kind element counts. Reopen clears bridge undo history.
