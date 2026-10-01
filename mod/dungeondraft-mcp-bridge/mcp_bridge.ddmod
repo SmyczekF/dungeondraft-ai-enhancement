@@ -1,6 +1,6 @@
 {
 	"name": "Dungeondraft MCP Bridge (Filip Smyczek)",
-	"unique_id": "SmyczekF.DungeondraftMCPBridge",
+	"unique_id": "DungeondraftMCP.Bridge",
 	"version": "0.2.1",
 	"author": "Filip Smyczek",
 	"description": "Exposes a localhost TCP/JSON bridge so an external MCP server can drive the open map.",

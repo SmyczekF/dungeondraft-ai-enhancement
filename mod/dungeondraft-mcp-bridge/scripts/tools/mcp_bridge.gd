@@ -22,7 +22,7 @@ var script_class = "tool"
 const HOST := "127.0.0.1"
 const PORT := 8787
 const PROTOCOL_VERSION := 17
-const LISTENER_OWNER_KEY := "SmyczekF.DungeondraftMCPBridge.listener_owner"
+const LISTENER_OWNER_KEY := "dungeondraft_mcp.bridge_listener_owner"
 
 # Commands that get wrapped in a Dungeondraft undo record (see _record_and_dispatch).
 const CREATE_CMDS := [

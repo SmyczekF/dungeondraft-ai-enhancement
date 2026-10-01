@@ -35,6 +35,8 @@ Map test is still required.
    Dungeondraft loads tool mods only after a map opens, so this first load is
    **[PLAN CHANGED]** to a manual action per app session.
 2. Fully restart Dungeondraft so the previous bridge code releases port 8787.
+   Enable the bridge in Mods again if needed: its neutral mod ID is now
+   `DungeondraftMCP.Bridge`.
    Open a disposable map, then create a second blank map using the UI. Check
    that no port alert or crash appears. Do not enable an older MCP Bridge mod.
 3. Click **Reload Mods** once. Codex will check MCP `ping` after you report back.
