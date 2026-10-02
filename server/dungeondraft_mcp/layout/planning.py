@@ -59,12 +59,16 @@ class Planner:
 
     def context(self):
         ping = self.bridge.request("ping")
-        if ping["protocol"] != 21:
-            raise BridgeError("planner requires bridge protocol 21")
+        if ping["protocol"] != 22:
+            raise BridgeError("planner requires bridge protocol 22")
         status = self.bridge.request("get_status")
         if not status["map_open"]:
             raise BridgeError("load a map before planning")
         info = self.bridge.request("get_map_info")
+        if any(info.get(k) for k in ("saving", "loading", "exporting")):
+            raise BridgeError(
+                "editor is busy saving/loading/exporting; wait before project operations"
+            )
         capabilities = self.bridge.request("get_capabilities")
         elements = []
         for kind, count in status["counts"].items():
@@ -79,9 +83,11 @@ class Planner:
                     )["elements"]
                 )
         water = self.bridge.request("get_water")["data"]
+        surface = self.bridge.request("get_surface_state")
         content = {
             "elements": elements,
             "water": normalize_native(water),
+            "surface": surface,
             "level_id": status["level_id"],
             "size": status["map_size_woxels"],
             "path": info["path"],
@@ -89,6 +95,7 @@ class Planner:
             "editor_dirty": info["editor_dirty"],
         }
         return {
+            "surface": surface,
             "bridge_instance": ping["bridge_instance"],
             "catalog_version": capabilities["asset_catalog_version"],
             "fingerprint": digest(content),
@@ -246,6 +253,10 @@ class Planner:
         from ..server import apply_batch, _wait_for_batch
 
         record = self.record(plan_id)
+        if record.get("imported"):
+            raise BridgeError(
+                "this applied/imported plan cannot be created again; use revise_battlemap"
+            )
         context = self.context()
         if context["bridge_instance"] != record["context"]["bridge_instance"]:
             raise BridgeError(
@@ -270,8 +281,11 @@ class Planner:
         record["job_id"] = job["job_id"]
         if wait:
             job = _wait_for_batch(job, 90)
-        if job["status"] == "completed":
+        if job["status"] == "completed" and record["manifest"] is None:
             record["manifest"] = self.manifest(record["plan"], job, record["context"])
+            current = self.context()
+            record["surface"] = current["surface"]
+            record["water"] = current["content"]["water"]
         return {
             "plan_id": plan_id,
             "job": job,
@@ -321,4 +335,207 @@ class Planner:
                     "operation": plan["operations"][row["index"]],
                 }
             )
+        return result
+
+    def check_capacity(self, plan_id):
+        if plan_id not in self.records and len(self.records) >= MAX_PLANS:
+            raise BridgeError("64 plans retained; save projects before restarting MCP")
+
+    def applied_record(self, plan_id):
+        record = self.record(plan_id)
+        if not record.get("manifest"):
+            raise BridgeError(
+                "apply this plan to completion before using project tools"
+            )
+        if record.get("superseded"):
+            raise BridgeError("plan was superseded by revision " + record["superseded"])
+        return record
+
+    def validate(self, plan_id):
+        from .validation import validate
+
+        record = self.applied_record(plan_id)
+        context = self.context()
+        report = validate(
+            record["plan"], record["manifest"], context, record.get("surface")
+        )
+        if context["content"]["water"] != record.get(
+            "water", context["content"]["water"]
+        ):
+            report["findings"].append(
+                {
+                    "severity": "error",
+                    "code": "water_changed",
+                    "feature_id": "map",
+                    "coordinates_tiles": None,
+                    "message": "native water differs from project ownership snapshot",
+                }
+            )
+            report["valid"] = False
+        return report
+
+    def revise(self, plan_id, replacements, dry_run=True):
+        from .revision import (
+            revised_spec,
+            object_diff,
+            revised_manifest,
+            revision_summary,
+            TERRAIN_COMMANDS,
+        )
+        from .validation import owned_elements
+        from ..server import apply_batch
+
+        record = self.record(plan_id)
+        if not record.get("manifest"):
+            raise BridgeError("apply plan first")
+        # Replays use the same native job even if current map now reflects it.
+        key = digest([plan_id, replacements])
+        pending = record.get("revision")
+        if (
+            pending
+            and pending["key"] != key
+            and pending.get("submitted")
+            and pending.get("terminal_status") not in ("cancelled", "failed")
+        ):
+            raise BridgeError(
+                "a different revision is unresolved; inspect/retry it before starting another"
+            )
+        if pending and pending["key"] == key and pending.get("completed"):
+            return copy.deepcopy(pending["result"])
+        if not pending or pending["key"] != key:
+            if record.get("superseded"):
+                raise BridgeError("use the current revision plan ID")
+            report = self.validate(plan_id)
+            if not report["valid"]:
+                return {"valid": False, "validation": report}
+            raw, selected = revised_spec(record["plan"], replacements)
+            try:
+                spec = MapSpec.model_validate(raw)
+            except ValidationError as exc:
+                return {
+                    "valid": False,
+                    "errors": [
+                        {"path": list(e["loc"]), "message": e["msg"]}
+                        for e in exc.errors(include_context=False)
+                    ],
+                }
+            context = self.context()
+            ids = {e["id"] for _, e in owned_elements(record["manifest"])}
+            manual = []
+            for descriptor in context["content"]["elements"]:
+                if descriptor["id"] not in ids:
+                    if not descriptor.get("bounds"):
+                        raise BridgeError(
+                            "manual element lacks bounds; cannot revise safely"
+                        )
+                    a, b = descriptor["bounds"]
+                    manual.append([a[0] / 256, a[1] / 256, b[0] / 256, b[1] / 256])
+            frozen = {
+                fid: s["generated"]
+                for fid, s in record["plan"]["features"].items()
+                if s["type"] == "forest" and fid not in selected
+            }
+            try:
+                plan = generate(
+                    spec, self.catalog(spec), context["catalog_version"], manual, frozen
+                )
+            except LayoutError as exc:
+                return {
+                    "valid": False,
+                    "errors": [{"feature_id": exc.feature_id, "message": str(exc)}],
+                }
+            for fid, semantic in record["plan"]["features"].items():
+                if semantic["type"] in ("building", "room", "stream") and digest(
+                    semantic
+                ) != digest(plan["features"][fid]):
+                    raise BridgeError(
+                        "revision would change unselected shared water/building geometry"
+                    )
+            old_terrain = [
+                o for o in record["plan"]["operations"] if o["cmd"] in TERRAIN_COMMANDS
+            ]
+            new_terrain = [
+                o for o in plan["operations"] if o["cmd"] in TERRAIN_COMMANDS
+            ]
+            operations, targets, identities = object_diff(record["manifest"], plan)
+            if old_terrain != new_terrain:
+                if spec.base_material is None:
+                    raise BridgeError(
+                        "terrain revision requires an owned base material"
+                    )
+                operations = new_terrain + operations
+                targets = [["base", None] for _ in new_terrain] + targets
+            if len(operations) > 500:
+                raise BridgeError("revision diff exceeds 500 native operations")
+            self.check_capacity(plan["plan_id"])
+            pending = {
+                "key": key,
+                "plan": plan,
+                "operations": operations,
+                "targets": targets,
+                "identities": identities,
+                "context": context,
+                "submitted": False,
+            }
+            record["revision"] = pending
+        result = {
+            "valid": True,
+            "base_plan_id": plan_id,
+            "plan_id": pending["plan"]["plan_id"],
+            "diff": revision_summary(pending["operations"]),
+            "operations": copy.deepcopy(pending["operations"]),
+            "warnings": pending["plan"]["warnings"],
+            "validation": pending["plan"]["validation"],
+        }
+        if dry_run:
+            return result
+        context = self.context()
+        if (
+            context["bridge_instance"] != pending["context"]["bridge_instance"]
+            or context["content"]["level_id"]
+            != pending["context"]["content"]["level_id"]
+        ):
+            raise BridgeError(
+                "editor instance or level changed; reload project before revising"
+            )
+        if (
+            not pending["submitted"]
+            and context["fingerprint"] != pending["context"]["fingerprint"]
+        ):
+            record.pop("revision", None)
+            raise BridgeError("map changed since revision dry run; revise again")
+        if pending["operations"]:
+            pending["submitted"] = True
+            job = apply_batch(pending["operations"], "revision:" + key)
+            if not job.get("accepted"):
+                pending["submitted"] = False
+                return {**result, "job": job}
+            if job["status"] != "completed":
+                pending["terminal_status"] = job["status"]
+                return {
+                    **result,
+                    "job": job,
+                    "message": "retry this same revision to inspect its retained result",
+                }
+        else:
+            job = {"status": "completed", "job_id": None, "results": []}
+        plan = pending["plan"]
+        manifest = revised_manifest(
+            plan, record["manifest"], job, pending["targets"], pending["identities"]
+        )
+        current = self.context()
+        self.records[plan["plan_id"]] = {
+            "plan": plan,
+            "context": current,
+            "manifest": manifest,
+            "submitted": True,
+            "job_id": job["job_id"],
+            "imported": True,
+            "surface": current["surface"],
+            "water": current["content"]["water"],
+        }
+        result.update(applied=True, job=job, manifest=manifest)
+        pending.update(completed=True, result=copy.deepcopy(result))
+        if plan["plan_id"] != plan_id:
+            record["superseded"] = plan["plan_id"]
         return result

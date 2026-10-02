@@ -40,8 +40,8 @@ Error:
 Coordinates are **woxel** (world pixel) space; map center is in
 `get_status -> map_center`. Every element is referenced by integer `id`
 (== Dungeondraft `node_id`); create commands return it, query commands list it.
-Protocol version 21 adds native water and polygon-region batching to the save
-checkpoint, inspection and bounded edit-job API. The unsafe new-map command remains absent. Dungeondraft
+Protocol version 22 adds reversible object transforms/deletion in batches,
+terrain ownership checksums and bounded grid-controlled exports. The unsafe new-map command remains absent. Dungeondraft
 loads mod scripts after a map opens, so the title screen has no bridge.
 
 ### Read / query
@@ -411,3 +411,27 @@ water and preserves independent gameplay metadata in its own manifest.
 
 The structured planner is a Python MCP layer; it does not add GDScript planning
 commands. See [MAP_SPEC.md](MAP_SPEC.md) for its schema/tools and lifecycle.
+
+## Project/revision native support (protocol 22)
+
+`get_surface_state` returns `{terrain_sha256, textures, level_id}`. SHA-256
+includes both native splat images when expanded slots are active and all texture
+paths. The planner records it after application and compares it before repaint.
+
+Batch schema v1 also accepts current-level object-only `move_element`
+(`id,x,y`), `modify_object` (`id,asset?,scale?,rotation?,shadow?,color?`) and
+`delete_object` (`id`). Texture changes are included in transform history.
+Reversible deletion snapshots the native serializer and restores a fresh Prop
+with the same ID using `Objects.LoadObject`; it never reattaches a stale Prop.
+General `delete_element` remains outside reversible batches.
+
+`export_map` accepts absolute `path`, integer `ppi` 8..256 and optional boolean
+`grid`. It rejects active exports and allocations above 16 megapixels or 8192
+pixels per side. The public `Editor.ToggleGrid` controls visibility; native
+`Master.IsExporting` determines completion and restoration. `get_export_status`
+returns `{exporting,managed_export,grid}`. MCP mutations are rejected during
+export. Camera restoration is performed by the native Exporter, then verified
+by the Python project renderer. `get_map_info` also reports `exporting`.
+
+Project/specification/manifest persistence and revision diffs live in Python,
+not in a second native protocol. See PHASE4_REVIEW.md. No client config changed.

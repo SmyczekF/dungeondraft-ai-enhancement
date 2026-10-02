@@ -204,7 +204,13 @@ def poisson(
     return placed, attempts
 
 
-def generate(spec: MapSpec, catalog: dict, catalog_version: str, manual_bounds=()):
+def generate(
+    spec: MapSpec,
+    catalog: dict,
+    catalog_version: str,
+    manual_bounds=(),
+    frozen_features=None,
+):
     warnings = []
     operations = []
     semantics = {}
@@ -406,18 +412,40 @@ def generate(spec: MapSpec, catalog: dict, catalog_version: str, manual_bounds=(
         ]
         region = polygon(f.region, f.id).intersection(inner)
         rng = random.Random(int(digest([spec.seed, f.id, GENERATOR_VERSION])[:16], 16))
-        placed, attempts = poisson(
-            region,
-            f.count,
-            f.min_spacing,
-            choices,
-            f.scale,
-            rng,
-            assets,
-            f.id,
-            occupied,
-            protected,
-        )
+        if frozen_features and f.id in frozen_features:
+            import copy
+
+            placed = copy.deepcopy(frozen_features[f.id])
+            attempts = 0
+            for item in placed:
+                footprint = Point(item["position"]).buffer(item["visual_radius"])
+                if (
+                    not region.covers(footprint)
+                    or footprint.intersects(protected)
+                    or any(
+                        math.dist(item["position"], other["position"])
+                        < item["visual_radius"] + other["visual_radius"] + 0.05
+                        for other in occupied
+                    )
+                ):
+                    raise LayoutError(
+                        f.id,
+                        "unselected forest conflicts with new clearance; include this forest in the revision",
+                    )
+                occupied.append(item)
+        else:
+            placed, attempts = poisson(
+                region,
+                f.count,
+                f.min_spacing,
+                choices,
+                f.scale,
+                rng,
+                assets,
+                f.id,
+                occupied,
+                protected,
+            )
         if len(placed) != f.count:
             raise LayoutError(
                 f.id,

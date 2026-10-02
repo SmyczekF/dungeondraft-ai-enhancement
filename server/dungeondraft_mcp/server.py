@@ -777,6 +777,7 @@ def move_element(id: int, x: float, y: float) -> dict:
 @mcp.tool()
 def modify_object(
     id: int,
+    asset: Optional[str] = None,
     scale: Optional[float] = None,
     rotation: Optional[float] = None,
     color: str = "",
@@ -784,6 +785,8 @@ def modify_object(
 ) -> dict:
     """Modify an existing object's scale, rotation (degrees), color ('#rrggbb') and/or shadow flag by id."""
     params: dict = {"id": id}
+    if asset is not None:
+        params["asset"] = asset
     if scale is not None:
         params["scale"] = scale
     if rotation is not None:
@@ -949,6 +952,69 @@ def undo() -> dict:
 def redo() -> dict:
     """Re-apply the last edit reversed by undo()."""
     return bridge.request("redo")
+
+
+@mcp.tool()
+def validate_battlemap(plan_id: str) -> dict:
+    """Check live counts, IDs, artwork, transforms, spacing, routes and owned surfaces.
+
+    Findings identify feature IDs and tile coordinates. Unknown manual element
+    bounds are conservative obstacles. Visual quality needs separate image review.
+    """
+    return planner.validate(plan_id)
+
+
+@mcp.tool()
+def render_preview(plan_id: str, max_pixels: int = 1024) -> list:
+    """Return a full-map PNG and plan/validation metadata, at most 2048px per side.
+
+    Uses specification grid visibility and restores editor camera/grid after
+    native export. Inspect the image separately from structural validation.
+    """
+    from .layout.project import render
+    record = planner.applied_record(plan_id)
+    validation = planner.validate(plan_id)
+    preview = render(bridge, record["plan"]["spec"], max_pixels=max_pixels)
+    return [json.dumps({"plan_id":plan_id,"preview":preview,"validation":validation}), Image(path=preview["path"])]
+
+
+@mcp.tool()
+def revise_battlemap(plan_id: str, features: list[dict], dry_run: bool = True) -> dict:
+    """Replace named feature specifications and inspect/apply a small native diff.
+
+    Supply complete existing feature replacements. Object transforms/retextures
+    preserve IDs; added/removed forest members use reversible native batches.
+    Unselected forests keep their positions. Include forests explicitly when
+    changing a road would invalidate their clearances. Shared terrain is rebuilt
+    only while its ownership checksum is unchanged; manual objects are preserved.
+    Stream/building geometry revision is not supported. Default dry_run edits
+    nothing; repeat identical features with dry_run=False to apply/retry safely.
+    """
+    return planner.revise(plan_id, features, dry_run)
+
+
+@mcp.tool()
+def save_battlemap_project(plan_id: str, directory: str) -> dict:
+    """Save validated spec/seed/catalog/manifest/report, native map and PNG together.
+
+    Directory must be a new absolute path; existing projects are never overwritten.
+    project.json with file checksums marks completion. An interrupted folder is
+    retained for recovery. The native map remains open at its new saved path.
+    """
+    from .layout.project import save_project
+    return save_project(planner, plan_id, directory)
+
+
+@mcp.tool()
+def load_battlemap_project(directory: str) -> dict:
+    """Restore planning ownership after MCP restart, for this project's open map.
+
+    Open directory/map.dungeondraft_map first. Validates checksums, schema and
+    native IDs/artwork/geometry/surface before adoption; edits and reopening are
+    not performed. Failed ownership verification preserves current planning data.
+    """
+    from .layout.project import load_project
+    return load_project(planner, directory)
 
 
 def main() -> None:

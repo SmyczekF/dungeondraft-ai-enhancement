@@ -21,7 +21,7 @@ var script_class = "tool"
 
 const HOST := "127.0.0.1"
 const PORT := 8787
-const PROTOCOL_VERSION := 21
+const PROTOCOL_VERSION := 22
 const MAX_REQUEST_BYTES := 1048576
 const LISTENER_KEY := "dungeondraft_mcp.bridge_listener"
 
@@ -63,6 +63,7 @@ var _pending_save_checkpoint := {}
 var _instance_id := ""
 var _asset_catalog := {}
 var _catalog_version := ""
+var _export_state := {}
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +102,7 @@ func _stop_listener():
 
 
 func update(delta : float):
+	_refresh_export()
 	if _server == null or not _server.is_listening():
 		return
 
@@ -168,10 +170,16 @@ func _handle_line(peer : StreamPeerTCP, line : String):
 # Pre-edit state (transform / terrain splat) is captured before the command runs.
 func _record_and_dispatch(req : Dictionary) -> Dictionary:
 	var cmd = req.get("cmd", "")
+	if bool(_master().get("IsExporting")) and (not cmd in BATCH_READ_COMMANDS or cmd == "apply_batch"):
+		return _err("native export is active; wait for get_export_status before editing")
 	if _active_batch != "" and not _executing_batch and not cmd in BATCH_READ_COMMANDS:
 		return _err("a batch is active; inspect or cancel it before other edits")
 
 	var pre = null
+	if cmd == "delete_object":
+		var node = _resolve(req)
+		if node != null and node.get_parent() == Global.World.GetCurrentLevel().Objects:
+			pre = {"kind": "delete_object", "id": int(req["id"]), "node": node, "parent": node.get_parent(), "data": node.Save(false)}
 	if cmd in TRANSFORM_CMDS and req.has("id"):
 		var node = Global.World.GetNodeByID(int(req["id"]))
 		if node != null:
@@ -199,7 +207,7 @@ func _record_and_dispatch(req : Dictionary) -> Dictionary:
 			op["edit_id"] = _edit_sequence
 			_undo_stack.append(op)
 			_redo_stack = []   # a fresh edit invalidates the redo branch
-		if cmd in CREATE_CMDS or cmd in TRANSFORM_CMDS or cmd in TERRAIN_CMDS or cmd in CAVE_CMDS or cmd == "draw_water" or cmd in ["delete_element", "place_pattern", "build_room", "set_terrain_slot", "add_level", "undo", "redo"]:
+		if cmd in CREATE_CMDS or cmd in TRANSFORM_CMDS or cmd in TERRAIN_CMDS or cmd in CAVE_CMDS or cmd in ["draw_water", "delete_object"] or cmd in ["delete_element", "place_pattern", "build_room", "set_terrain_slot", "add_level", "undo", "redo"]:
 			if op == null and not cmd in ["undo", "redo"]:
 				_unrecorded_revision += 1
 	return result
@@ -216,6 +224,9 @@ func _build_op(cmd, req, result, pre, terrain_before, cave_before = null, water_
 				if cmd in ["place_object", "duplicate_object"]:
 					return { "kind": "create_object", "node": node, "parent": node.get_parent(), "id": int(id), "data": node.Save(false) }
 				return { "kind": "create", "node": node, "parent": node.get_parent(), "id": int(id) }
+	elif cmd == "delete_object" and pre != null:
+		pre["node"] = null
+		return pre
 	elif cmd in TRANSFORM_CMDS and pre != null:
 		var node = Global.World.GetNodeByID(int(req["id"]))
 		if node != null:
@@ -257,6 +268,22 @@ func _do_redo() -> Dictionary:
 
 func _apply_op(op, undo : bool) -> bool:
 	match op["kind"]:
+		"delete_object":
+			var level = Global.World.GetCurrentLevel()
+			if level == null or not is_instance_valid(op["parent"]) or op["parent"] != level.Objects:
+				return false
+			if undo:
+				if Global.World.HasNodeID(int(op["id"])):
+					return false
+				op["node"] = level.Objects.LoadObject(op["data"])
+				return op["node"] != null
+			var node = Global.World.GetNodeByID(int(op["id"]))
+			if node == null or node.get_parent() != level.Objects:
+				return false
+			_deselect_node(node)
+			_detach_node(node, int(op["id"]))
+			node.queue_free()
+			op["node"] = null
 		"create_object":
 			# Prop._ExitTree removes its native search-table entry. Reattaching the
 			# same Prop recreates render children but leaves that entry stale.
@@ -286,6 +313,8 @@ func _apply_op(op, undo : bool) -> bool:
 			else:
 				_attach_node(op["node"], op["parent"], int(op["id"]))
 		"transform":
+			if not Global.World.HasNodeID(int(op["id"])):
+				return false
 			_apply_props(Global.World.GetNodeByID(int(op["id"])), op["old"] if undo else op["new"])
 		"water":
 			var mesh = Global.World.GetCurrentLevel().WaterMesh
@@ -321,6 +350,8 @@ func _attach_node(node, parent, id : int):
 func _apply_props(node, snap):
 	if node == null or snap == null:
 		return
+	if snap.get("texture") != null and node.has_method("SetTexture"):
+		node.SetTexture(snap["texture"])
 	if snap.get("position") != null:
 		node.position = snap["position"]
 	if snap.get("rotation") != null:
@@ -383,6 +414,8 @@ func _restore_cave(bm):
 
 func _snapshot(node) -> Dictionary:
 	var s := {}
+	if node.get_parent() == Global.World.GetCurrentLevel().Objects:
+		s["texture"] = node.get("Texture")
 	if node is Node2D:
 		s["position"] = node.position
 		s["rotation"] = node.rotation
@@ -400,6 +433,11 @@ func _safe_dispatch(req : Dictionary) -> Dictionary:
 	var cmd = req.get("cmd", "")
 	match cmd:
 		# --- read / query ---
+		"get_surface_state": return _surface_state()
+		"get_export_status":
+			_refresh_export()
+			return _ok({"exporting": bool(_master().get("IsExporting")), "managed_export": not _export_state.empty(), "grid": Global.Editor.GridToggle.pressed})
+		"delete_object": return _delete_object(req)
 		"get_water": return _ok({"level_id": Global.World.CurrentLevelId, "data": Global.World.GetCurrentLevel().WaterMesh.Save()})
 		"ping": return _ok({ "pong": true, "protocol": PROTOCOL_VERSION, "bridge_instance": _instance_id, "engine": Engine.get_version_info() })
 		"get_status": return _get_status()
@@ -469,11 +507,11 @@ const ASSET_CATEGORIES := [
 ]
 const SUPPORTED_COMMANDS := [
 	"ping", "get_status", "get_map_info", "get_capabilities", "refresh_asset_catalog",
-	"list_asset_categories", "list_assets", "list_asset_metadata", "list_elements", "get_element", "get_water", "list_levels",
+	"list_asset_categories", "list_assets", "list_asset_metadata", "list_elements", "get_element", "get_water", "get_surface_state", "get_export_status", "list_levels",
 	"apply_batch", "get_batch", "cancel_batch", "open_map", "save_map", "confirm_save", "place_object", "draw_wall", "draw_path", "add_light",
 	"add_portal", "add_roof", "add_text", "place_pattern", "build_room", "set_terrain_slot",
 	"fill_terrain", "fill_region", "draw_water", "paint_terrain", "paint_path", "dig_cave", "clear_caves",
-	"move_element", "modify_object", "duplicate_object", "delete_element", "add_level", "set_level",
+	"move_element", "modify_object", "duplicate_object", "delete_object", "delete_element", "add_level", "set_level",
 	"screenshot", "export_map", "get_camera", "set_camera", "focus_element", "fit_elements",
 	"undo", "redo", "select_elements", "clear_selection",
 ]
@@ -578,7 +616,7 @@ func _get_map_info() -> Dictionary:
 	var current_file = Global.Editor.get("CurrentMapFile")
 	var path = "" if current_file == null else str(current_file)
 	var master_node = _master()
-	var info := {"map_open": level != null, "path": path, "bridge_instance": _instance_id, "dirty": bool(master_node.get("IsModified")) or _state_signature() != _saved_state_signature, "editor_dirty": bool(master_node.get("IsModified")), "bridge_dirty": _state_signature() != _saved_state_signature, "saving": bool(master_node.get("IsSaving")), "loading": bool(master_node.get("IsLoadingMap"))}
+	var info := {"map_open": level != null, "path": path, "bridge_instance": _instance_id, "dirty": bool(master_node.get("IsModified")) or _state_signature() != _saved_state_signature, "editor_dirty": bool(master_node.get("IsModified")), "bridge_dirty": _state_signature() != _saved_state_signature, "exporting": bool(master_node.get("IsExporting")), "saving": bool(master_node.get("IsSaving")), "loading": bool(master_node.get("IsLoadingMap"))}
 	if level != null:
 		info["size_tiles"] = [int(Global.World.WoxelDimensions.x / 256), int(Global.World.WoxelDimensions.y / 256)]
 		info["size_woxels"] = _vec(Global.World.WoxelDimensions)
@@ -1637,6 +1675,12 @@ func _move_element(req : Dictionary) -> Dictionary:
 func _modify_object(req : Dictionary) -> Dictionary:
 	var node = _resolve(req)
 	if node == null: return _err("no element with id " + str(req.get("id")))
+	if req.has("asset"):
+		if node.get_parent() != Global.World.GetCurrentLevel().Objects:
+			return _err("retexture requires an object")
+		var tex = _asset_tex("Objects", req["asset"])
+		if tex == null: return _err("object asset cannot be loaded")
+		node.SetTexture(tex)
 	if req.has("scale"):
 		var s = float(req["scale"]); node.scale = Vector2(s, s)
 	if req.has("rotation"):
@@ -1712,10 +1756,52 @@ func _screenshot(req : Dictionary) -> Dictionary:
 # on a separate thread, so the caller (MCP server) polls the path for the file.
 func _export_map(req : Dictionary) -> Dictionary:
 	var path = str(req.get("path", ""))
-	if path == "": return _err("missing 'path'")
-	var ppi = int(req.get("ppi", 40))
-	Global.Exporter.Start(0, ppi, path)  # mode 0 = PNG
-	return _ok({ "path": path, "ppi": ppi, "async": true })
+	var ppi = req.get("ppi", 40)
+	if not path.is_abs_path(): return _err("absolute export path required")
+	if not _batch_integer(ppi, 8, 256): return _err("ppi must be an integer in 8..256")
+	var pixels = Global.World.WoxelDimensions / 256.0 * ppi
+	if pixels.x * pixels.y > 16777216 or max(pixels.x, pixels.y) > 8192:
+		return _err("export exceeds 16 megapixels or 8192 pixels per side; reduce ppi")
+	_refresh_export()
+	if bool(_master().get("IsExporting")) or not _export_state.empty():
+		return _err("export already active")
+	if req.has("grid") and typeof(req["grid"]) != TYPE_BOOL: return _err("grid must be boolean")
+	_export_state = {"grid": Global.Editor.GridToggle.pressed}
+	if req.has("grid"):
+		Global.Editor.ToggleGrid(req["grid"])
+	Global.Exporter.Start(0, int(ppi), path)
+	return _ok({"path": path, "ppi": ppi, "pixels": _vec(pixels), "async": true})
+
+
+func _refresh_export():
+	if not _export_state.empty() and not bool(_master().get("IsExporting")):
+		Global.Editor.ToggleGrid(_export_state["grid"])
+		_export_state = {}
+
+
+func _surface_state() -> Dictionary:
+	var terrain = Global.World.GetCurrentLevel().Terrain
+	var context = HashingContext.new()
+	context.start(HashingContext.HASH_SHA256)
+	context.update(terrain.CloneSplatImage().get_data())
+	if terrain.ExpandedSlots:
+		context.update(terrain.CloneSplatImage2().get_data())
+	var paths := []
+	for i in range(terrain.textures.size()):
+		var texture = terrain.GetTexture(i)
+		paths.append(texture.resource_path if texture != null else "")
+	context.update(JSON.print(paths).to_utf8())
+	return _ok({"terrain_sha256": context.finish().hex_encode(), "textures": paths, "level_id": Global.World.CurrentLevelId})
+
+
+func _delete_object(req : Dictionary) -> Dictionary:
+	var node = _resolve(req)
+	if node == null or node.get_parent() != Global.World.GetCurrentLevel().Objects:
+		return _err("delete_object requires an existing object on the current level")
+	_deselect_node(node)
+	_detach_node(node, int(req["id"]))
+	node.queue_free()
+	return _ok({"deleted": true, "id": int(req["id"])})
 
 
 # ---------------------------------------------------------------------------
@@ -2135,6 +2221,9 @@ const MAX_BATCH_JOBS := 64
 const BATCH_OPERATIONS_PER_FRAME := 4
 const BATCH_FRAME_BUDGET_USEC := 8000
 const BATCH_FIELDS := {
+	"move_element": ["cmd", "id", "x", "y"],
+	"modify_object": ["cmd", "id", "asset", "scale", "rotation", "shadow", "color"],
+	"delete_object": ["cmd", "id"],
 	"place_object": ["cmd", "asset", "x", "y", "scale", "rotation", "sorting", "color"],
 	"draw_wall": ["cmd", "asset", "points", "loop", "shadow", "type", "joint", "color"],
 	"draw_path": ["cmd", "asset", "points", "layer", "sorting", "width", "smoothness"],
@@ -2177,7 +2266,7 @@ func _batch_validate(op) -> Array:
 	for field in op:
 		if not field in BATCH_FIELDS[cmd]:
 			errors.append("unknown field: " + str(field))
-	if cmd in ["place_object", "add_light", "add_portal", "paint_terrain"]:
+	if cmd in ["place_object", "add_light", "add_portal", "paint_terrain", "move_element"]:
 		if not _batch_point([op.get("x"), op.get("y")]):
 			errors.append("x/y must be finite coordinates within the map")
 	if cmd in ["draw_wall", "draw_path", "paint_path", "fill_region", "draw_water"]:
@@ -2230,6 +2319,19 @@ func _batch_validate(op) -> Array:
 		var slot = op.get("slot", 0)
 		if _batch_integer(slot, 0, 3) and Global.World.GetCurrentLevel().Terrain.GetTexture(slot) == null:
 			errors.append("terrain slot must have a native texture for rollback")
+	if cmd in ["move_element", "modify_object", "delete_object"]:
+		if not _batch_integer(op.get("id"), 0, 2147483647):
+			errors.append("id must be a nonnegative integer")
+		else:
+			var node = Global.World.GetNodeByID(int(op["id"]))
+			if node == null or node.get_parent() != Global.World.GetCurrentLevel().Objects:
+				errors.append("batch transforms/deletion require an object on the current level")
+		if cmd == "modify_object" and op.has("asset"):
+			if typeof(op["asset"]) != TYPE_STRING or not _asset_catalog["Objects"].has(op["asset"]):
+				errors.append("asset is not in the loaded Objects catalog")
+			elif _asset_tex("Objects", op["asset"]) == null:
+				errors.append("asset texture cannot be loaded")
+		return errors
 	if cmd == "draw_water":
 		return errors
 	var category = "Terrain" if cmd == "fill_region" else BATCH_CATEGORIES[cmd]

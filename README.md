@@ -27,7 +27,7 @@ forwards calls as JSON. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
 > **Compatibility:** This version targets the installed Windows build,
 > **Dungeondraft 1.2.0.1**. Documented API calls were checked against the
 > published modding reference and a live 1.2.0.1 session. See
-> [API_COMPATIBILITY.md](API_COMPATIBILITY.md). It exposes 54 tools across
+> [API_COMPATIBILITY.md](API_COMPATIBILITY.md). It exposes 59 tools across
 > lifecycle, inspection, creation, terrain, editing, levels,
 > selection, capture, camera, and undo.
 
@@ -39,6 +39,9 @@ Phase 2 batch acceptance and review steps are in [PHASE2_REVIEW.md](PHASE2_REVIE
 Phase 3 structured planning is described in [MAP_SPEC.md](MAP_SPEC.md) and
 [PHASE3_REVIEW.md](PHASE3_REVIEW.md).
 
+Phase 4 projects, validation and named revisions are documented in
+[PHASE4_REVIEW.md](PHASE4_REVIEW.md).
+
 ## What the AI can do
 
 - **Plan:** `get_map_spec_schema`, `plan_battlemap`, `apply_battlemap`,
@@ -46,6 +49,11 @@ Phase 3 structured planning is described in [MAP_SPEC.md](MAP_SPEC.md) and
   deterministic layout and one native batch. The manifest preserves semantic
   IDs, gameplay metadata and created editor IDs. See the
   [forest ambush example](examples/forest-ambush.json).
+- **Review and revise:** `render_preview`, `validate_battlemap`,
+  `revise_battlemap`, `save_battlemap_project`, `load_battlemap_project`. Save
+  native maps, specifications, seeds, resolved assets and semantic IDs together.
+  Revisions preserve manual objects and report ownership conflicts. Use the new
+  plan ID after revision.
 - **Inspect:** `get_status`, `list_levels`, `list_elements`, `get_element`,
   `get_map_info`, `get_capabilities`, `list_asset_categories`, `list_assets`,
   `list_asset_metadata` (paged paths, dimensions and filename tags).

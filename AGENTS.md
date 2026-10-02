@@ -16,12 +16,23 @@ The tools talk to a live Dungeondraft, not this repo. They only work when:
    also created manually; the bridge can reopen saved maps.
 
 If both aren't true, calls fail (connection refused, or `"no map open"`).
-**Verify first:** call `ping` (expect `pong` + protocol version 21), then
+**Verify first:** call `ping` (expect `pong` + protocol version 22), then
 `get_status` (expect `map_open: true` and a `map_center`). If `ping` fails, the
 mod isn't loaded or DD isn't running — ask the user to start it; don't retry
 blindly.
 
 ## Working with the map
+
+- Use `render_preview` and `validate_battlemap` after applying a plan. Pixel
+  review and structural connectivity are separate checks. Save reproducible
+  bundles with `save_battlemap_project`. After restarting MCP/editor, open the
+  bundle native map and restore ownership with `load_battlemap_project`.
+- `revise_battlemap` accepts complete named feature replacements; default dry
+  run returns the diff. Retain the new plan ID. Manual terrain changes cause
+  ownership conflicts. Stream/building shared geometry is currently excluded.
+- Exports are bounded to 16 megapixels / 8192 pixels per side. Wait for native
+  export completion before editing; previews restore grid and camera.
+
 
 - Prefer `plan_battlemap` then `apply_battlemap` for complete encounters. Specs
   use tiles, while low-level operations use woxels. Inspect warnings and

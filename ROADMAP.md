@@ -17,11 +17,12 @@ The source of truth is the specification plus its seed and asset selections. Kee
 
 ## What the MCP can do today
 
-The Python MCP server exposes **54 tools** in the Phase 3 source. They operate after Dungeondraft has loaded a map and started its mod scripts:
+The Python MCP server exposes **59 tools** in the Phase 4 source. They operate after Dungeondraft has loaded a map and started its mod scripts:
 
 | Area | Existing tools |
 | --- | --- |
 | Connection and discovery | `ping`, `get_status`, `get_map_info`, `get_capabilities`, `list_asset_categories`, `list_assets`, `list_asset_metadata`, `refresh_asset_catalog`, `list_elements`, `get_element`, `list_levels` |
+| Project review and revisions | `render_preview`, `validate_battlemap`, `revise_battlemap`, `save_battlemap_project`, `load_battlemap_project` |
 | Structured planning | `get_map_spec_schema`, `plan_battlemap`, `apply_battlemap`, `get_battlemap` |
 | Native water | `draw_water`, `get_water` |
 | Native batching | `apply_batch`, `get_batch`, `cancel_batch` |
@@ -143,13 +144,26 @@ Building floors use terrain rather than non-reversible floor-pattern batches.
 
 ## Phase 4 — Preview, validation, and targeted revision
 
-- [ ] Add `render_preview` that frames the generated content and returns a reasonably sized image plus plan metadata. Retain full-resolution `export_map` for final output.
-- [ ] Add structural checks for counts, assets, bounds, spacing, accessible routes, stream crossings, and semantic requirements. Report each finding with feature IDs and coordinates.
-- [ ] Keep visual review as a separate step: inspect the rendered image for clipping, readability, and asset mismatch, then express changes as targeted feature revisions. Do not claim pixel analysis proves gameplay reachability.
-- [ ] Implement `revise_battlemap` as a diff against the stored manifest: move/retexture/regenerate selected features, preserve unrelated manual edits, preview, and save again.
-- [ ] Save the spec, seed, resolved asset catalog, generated-ID manifest, validation report, native map, and preview together in a reproducible project folder.
+- [x] Add `render_preview` that frames the generated content and returns a reasonably sized image plus plan metadata. Retain full-resolution `export_map` for final output.
+- [x] Add structural checks for counts, assets, bounds, spacing, accessible routes, stream crossings, and semantic requirements. Report each finding with feature IDs and coordinates.
+- [x] Keep visual review as a separate step: inspect the rendered image for clipping, readability, and asset mismatch, then express changes as targeted feature revisions. Do not claim pixel analysis proves gameplay reachability.
+- [x] Implement `revise_battlemap` as a diff against the stored manifest: move/retexture/regenerate selected features, preserve unrelated manual edits, preview, and save again.
+- [x] Save the spec, seed, resolved asset catalog, generated-ID manifest, validation report, native map, and preview together in a reproducible project folder.
 
 **Exit:** A failed placement or an ugly/blocked road can be corrected by changing named features and reapplying a small diff, without rebuilding the whole map.
+
+**Exit achieved (2026-10-02):** Protocol 22 / package 0.5.0 passed sixteen
+pure tests and a fresh 59-tool MCP client. Native PNG preview, project reload,
+stable-ID movement/retexture, forest shrink, road repaint, manual edit
+preservation and checksum conflict rejection passed. A full editor restart
+retained all 51 objects, water and ownership. Captured logs clean; see
+[PHASE4_REVIEW.md](PHASE4_REVIEW.md).
+
+**[PLAN CHANGED]** Shared terrain repaint requires an unchanged ownership
+checksum; manual painting conflicts are rejected. Stream/building geometry
+revision is excluded until its ownership/rollback is verified. Unselected
+forests keep their positions; include them explicitly if a new road clearance
+requires regeneration. Pixel review remains separate from structural checks.
 
 ## Phase 5 — Foundry VTT export (separate integration)
 
