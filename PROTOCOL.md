@@ -40,8 +40,8 @@ Error:
 Coordinates are **woxel** (world pixel) space; map center is in
 `get_status -> map_center`. Every element is referenced by integer `id`
 (== Dungeondraft `node_id`); create commands return it, query commands list it.
-Protocol version 19 adds explicit native-save checkpoint confirmation to native
-save/open and paged inspection. The unsafe new-map command remains absent. Dungeondraft
+Protocol version 20 adds bounded native edit jobs to the save checkpoint and
+paged inspection API. The unsafe new-map command remains absent. Dungeondraft
 loads mod scripts after a map opens, so the title screen has no bridge.
 
 ### Read / query
@@ -51,7 +51,7 @@ loads mod scripts after a map opens, so the title screen has no bridge.
 | `ping` | — | `{ pong, protocol, bridge_instance, engine }` |
 | `get_status` | — | `{ map_open, level_id, level_count, map_size_woxels, map_center, counts{}, active_tool }` |
 | `get_map_info` | — | `{ map_open, path, size_tiles?, size_woxels?, level_id?, level_count?, dirty, editor_dirty, bridge_dirty, saving, loading, bridge_instance }` |
-| `get_capabilities` | — | `{ protocol, bridge_instance, engine, commands[], asset_catalog_version, asset_counts{}, active_mods[] }` |
+| `get_capabilities` | — | `{ protocol, bridge_instance, engine, commands[], asset_catalog_version, asset_counts{}, active_mods[], batch{} }` |
 | `list_asset_categories` | — | `{ categories[] }` |
 | `list_assets` | `category="Objects"`, `search=""`, `offset=0`, `limit=100` | `{ category, catalog_version, total, matched, offset, limit, returned, assets[] }` |
 | `list_asset_metadata` | `category="Objects"`, `search=""`, `offset=0`, `limit=100` | Same pagination; asset entries include `path`, `category`, `tags[]`, `texture_pixels?`, `nominal_footprint_woxels?` |
@@ -328,3 +328,60 @@ not recorded. This stack is independent of the user's Ctrl+Z in Dungeondraft.
   falls back to freestanding unless `fallback_free:false`. `flip` reverses the
   facing. The response `kind` is `"wall_portal"` when mounted, `"portal"` when
   freestanding.
+
+## Native batch jobs (protocol 20, schema v1)
+
+Wire request: `apply_batch` with `schema_version: 1`, `operations: [...]`, and
+`idempotency_key`. Each operation contains `cmd` and that command's parameters.
+The MCP tool supplies the schema version and waits internally by default;
+`wait=false` returns immediately for polling/cancellation.
+
+| Limit | Value |
+| --- | --- |
+| Operations | 1..500 |
+| UTF-8 request, including newline | 1 MiB |
+| Terrain operations | 16 |
+| Retained jobs per bridge instance | 64; never evicted silently |
+| Key | 1..128 characters |
+| Work per frame | Four operations or 8 ms between operations |
+| Point lists | 2..32 finite pairs inside the map |
+
+A single terrain operation can exceed the frame budget. These are scheduling
+limits, not a guaranteed frame rate. This version supports `place_object`,
+`draw_wall` (type 0, joint 1), `draw_path`, `add_light`, `add_portal`
+(`mount=free` only), `fill_terrain`, `paint_terrain`, and `paint_path`.
+Assets must belong to the loaded category; only default lights may omit one.
+Unknown fields, invalid numeric/boolean/color values, missing assets and bounds
+errors return `accepted=false` plus indexed `validation_errors` before editing.
+Integer parameters accept integral JSON numbers; booleans are not numbers.
+Bounds validation checks anchor/point coordinates, not full sprite extents.
+
+Accepted responses identify `job_id`, `bridge_instance`, `status`, `total`,
+`processed`, `rollback_remaining`, `max_frame_ms`, and per-operation `results`
+containing index, command, status and the original result (including created ID).
+`get_batch(job_id, include_results=false)` gives compact progress. Terminal
+statuses are `completed`, `cancelled`, `failed`, and `failed_partial`.
+`cancel_batch(job_id)` requests cancellation and the MCP tool waits for rollback.
+Cancelling a completed job does nothing.
+
+Atomicity is preflight plus rollback of completed operations on failure/cancel.
+Terrain snapshots include textures and both splat images when slots are expanded.
+Full rollback restores the previous bridge history/redo branch and checkpoint
+state. Results already undone are marked `rolled_back`; a rollback failure or
+external level change yields `failed_partial`. Inspect it before further edits.
+Native engine exceptions cannot be caught by GDScript; lost connectivity is an
+uncertain outcome, never proof that no edits happened.
+
+Same key plus canonically identical operations returns the retained job without
+reapplying, including after completion/cancellation. A conflicting plan with the
+same key is rejected. Jobs/keys are not durable across a map replacement or fresh
+process, and Reload Mods is not a durable recovery mechanism. Check instance ID
+before retrying. A default wait may return `wait_timed_out` after 90 seconds;
+inspect the same job or retry the same key. Other MCP mutations are rejected while
+a job runs. **Do not edit, switch levels, reload mods, or replace the map through
+the native UI during a job.** Native `SuppressTool` also disables mod updates and
+cannot provide a batch lock.
+
+Mounted portals, rooms/floor patterns, deletion, caves, lifecycle changes and
+other irreversible operations are excluded. Their existing low-level tools
+remain available. Extending batches requires a validated reversible edit record.

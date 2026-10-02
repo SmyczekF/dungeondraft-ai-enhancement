@@ -171,6 +171,61 @@ def save_map(path: str = "", overwrite: bool = False) -> dict:
     return {"path": str(target), "bytes": target.stat().st_size, "valid_native_json": True}
 
 
+BATCH_TERMINAL = {"completed", "cancelled", "failed", "failed_partial"}
+
+
+def _wait_for_batch(job: dict, timeout: float) -> dict:
+    deadline = time.monotonic() + timeout
+    while job["status"] not in BATCH_TERMINAL:
+        if time.monotonic() >= deadline:
+            return {**job, "wait_timed_out": True, "message": "Job may still be running. Inspect this job_id or retry with the same key; do not submit a new key."}
+        time.sleep(0.1)
+        try:
+            job = bridge.request("get_batch", job_id=job["job_id"], include_results=False)
+        except BridgeError as exc:
+            return {**job, "wait_interrupted": True, "transport_error": str(exc), "message": "Outcome uncertain; inspect this job_id or retry the same key in the same bridge instance."}
+    return bridge.request("get_batch", job_id=job["job_id"])
+
+
+@mcp.tool()
+def apply_batch(operations: list[dict], idempotency_key: str, wait: bool = True) -> dict:
+    """Preflight and apply 1..500 edits as one native job (batch schema v1).
+
+    Supports objects, paths, normal walls, lights, free portals, fill_terrain,
+    paint_terrain and paint_path. Coordinates are woxels; see get_capabilities
+    for bounds and limits. Explicit assets are required except default lights;
+    free portals require mount="free". At most 16 terrain operations per job.
+    Invalid plans return accepted=false and indexed errors before any edits.
+    Matching retries reuse the retained job in this bridge instance. Default
+    wait polls internally for up to 90 seconds; wait=False returns a job_id for
+    progress/cancellation. Failed/cancelled jobs attempt rollback; inspect status
+    and per-operation results. Do not change the editor UI while a job runs.
+    """
+    payload = {"cmd": "apply_batch", "schema_version": 1, "operations": operations, "idempotency_key": idempotency_key}
+    if len(json.dumps(payload).encode("utf-8")) + 1 > 1048576:
+        raise BridgeError("batch request exceeds 1 MiB")
+    try:
+        job = bridge.request("apply_batch", schema_version=1, operations=operations, idempotency_key=idempotency_key)
+    except BridgeError as exc:
+        raise BridgeError(f"Batch outcome uncertain. Retry the same idempotency_key {idempotency_key!r} in the same bridge instance; do not create a new key. {exc}") from exc
+    if not job.get("accepted") or not wait:
+        return job
+    return _wait_for_batch(job, 90)
+
+
+@mcp.tool()
+def get_batch(job_id: str, include_results: bool = True) -> dict:
+    """Inspect progress/results of a retained job in the current bridge instance."""
+    return bridge.request("get_batch", job_id=job_id, include_results=include_results)
+
+
+@mcp.tool()
+def cancel_batch(job_id: str) -> dict:
+    """Cancel pending work and wait for rollback; already completed jobs are unchanged."""
+    job = bridge.request("cancel_batch", job_id=job_id)
+    return _wait_for_batch(job, 90)
+
+
 @mcp.tool()
 def list_asset_categories() -> dict:
     """List the valid asset category names (Objects, Walls, Paths, Terrain, Lights, Portals, Roofs, ...)."""

@@ -23,7 +23,7 @@ def dirty(expected, label):
 
 report = {'passed': False, 'checks': checks}
 try:
-    assert b.request('ping')['protocol'] == 19
+    assert b.request('ping')['protocol'] == 20
     assert not any(b.request('get_status')['counts'].values())
     tree = b.request('list_assets', category='Objects', search='Tree', limit=1)['assets'][0]
     initial = b.request('get_map_info')['bridge_instance']

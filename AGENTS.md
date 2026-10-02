@@ -16,12 +16,19 @@ The tools talk to a live Dungeondraft, not this repo. They only work when:
    also created manually; the bridge can reopen saved maps.
 
 If both aren't true, calls fail (connection refused, or `"no map open"`).
-**Verify first:** call `ping` (expect `pong` + protocol version 19), then
+**Verify first:** call `ping` (expect `pong` + protocol version 20), then
 `get_status` (expect `map_open: true` and a `map_center`). If `ping` fails, the
 mod isn't loaded or DD isn't running — ask the user to start it; don't retry
 blindly.
 
 ## Working with the map
+
+- Prefer `apply_batch` for repetitive placement. Check `get_capabilities.batch`
+  for supported commands and limits. Use a stable idempotency key and retain
+  the returned job ID; jobs are scoped to the current bridge instance.
+  Leave the native editor UI unchanged until completion or cancellation.
+  `SuppressTool` also disables mod updates; never use it to lock a batch.
+
 
 - Coordinates are **woxel** (world-pixel) space; get `map_center` from
   `get_status`. There are 256 woxels per tile.

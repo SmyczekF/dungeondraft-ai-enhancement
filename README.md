@@ -27,12 +27,14 @@ forwards calls as JSON. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
 > **Compatibility:** This version targets the installed Windows build,
 > **Dungeondraft 1.2.0.1**. Documented API calls were checked against the
 > published modding reference and a live 1.2.0.1 session. See
-> [API_COMPATIBILITY.md](API_COMPATIBILITY.md). It exposes 45 tools across
+> [API_COMPATIBILITY.md](API_COMPATIBILITY.md). It exposes 48 tools across
 > lifecycle, inspection, creation, terrain, editing, levels,
 > selection, capture, camera, and undo.
 
 Phase 1's live acceptance procedure and current verification status are in
 [PHASE1_REVIEW.md](PHASE1_REVIEW.md).
+
+Phase 2 batch acceptance and review steps are in [PHASE2_REVIEW.md](PHASE2_REVIEW.md).
 
 ## What the AI can do
 
@@ -50,6 +52,11 @@ Phase 1's live acceptance procedure and current verification status are in
   On 1.2.0.1, UI New Map can log native object-cleanup exceptions even with
   all mods disabled; restart the editor before creating the next blank map
   if this happens. The bridge's separate port-conflict issue is fixed.
+- **Batch:** `apply_batch`, `get_batch`, `cancel_batch` validate and execute up to
+  500 reversible operations across editor frames. Matching idempotency keys
+  reuse the same retained job. Cancellation restores completed edits, including
+  terrain textures. Use the same key after an uncertain reply; never invent a
+  replacement key. Leave the editor UI unchanged while a job runs.
 - **Create:** `place_object`, `draw_wall`, `draw_path`, `add_light`,
   `add_portal`, `add_roof`, `add_text`, `place_pattern` (tiled floor shapes —
   wood planks, tile, brick — rendered below objects), `build_room` (a wall loop
@@ -96,7 +103,7 @@ PowerShell on Windows.
 On load you should see in the Dungeondraft log:
 
 ```
-[mcp-bridge] listening on 127.0.0.1:8787 (protocol v19)
+[mcp-bridge] listening on 127.0.0.1:8787 (protocol v20)
 ```
 
 ### 2. Install the MCP server

@@ -27,7 +27,7 @@ The [World reference](https://megasploot.github.io/DungeondraftModdingAPI/refere
 defines `CurrentLevelId` as a level ID. `list_levels` now finds its array index
 by matching each `Level.ID`, and reports both `current_index` and `current_id`.
 
-The Python MCP side uses MCP Python SDK v2 and exposes 45 tools in the Phase 1
+The Python MCP side uses MCP Python SDK v2 and exposes 48 tools in the Phase 2
 source. On the running
 Dungeondraft 1.2.0.1 instance, an MCP client completed `ping` (bridge protocol
 v16, Godot 3.4.2), `get_status`, `list_assets`, `place_object`, `delete_element`,
@@ -167,3 +167,17 @@ Stale confirmations fail. Manual UI saves are not checkpoint confirmation.
 a fresh MCP client saved successfully. DungeondraftConsole showed the protocol
 19 listener with no script/runtime errors after testing. The test left a saved
 empty disposable map. Native editor dirty state remains independently reported.
+
+## Phase 2 native batching (2026-10-02)
+
+Protocol 20 / package 0.3.0 adds three MCP tools. Installed `Editor._Process`
+inspection confirmed that `SuppressTool` skips `ModManager.Update`, so batches
+must not set it. The initial stalled test was discarded; the corrected handler
+passed fresh-console acceptance. JSON integral values arrive as Godot reals and
+must be checked mathematically, not by `TYPE_INT` alone.
+
+Terrain rollback now preserves `GetTexture`/`SetTexture`, `CloneSplatImage`, and
+`CloneSplatImage2`/`RestoreSplat2` when `ExpandedSlots` is enabled. On the tested
+default terrain, cancellation restored identical before/after PNG hashes. Expanded
+slots are implemented using the native API but were not separately tested live.
+See [PHASE2_REVIEW.md](PHASE2_REVIEW.md) for results and limitations.

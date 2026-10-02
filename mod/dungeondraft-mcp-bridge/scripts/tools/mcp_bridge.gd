@@ -21,7 +21,8 @@ var script_class = "tool"
 
 const HOST := "127.0.0.1"
 const PORT := 8787
-const PROTOCOL_VERSION := 19
+const PROTOCOL_VERSION := 20
+const MAX_REQUEST_BYTES := 1048576
 const LISTENER_KEY := "dungeondraft_mcp.bridge_listener"
 
 # Commands that get wrapped in a Dungeondraft undo record (see _record_and_dispatch).
@@ -115,9 +116,13 @@ func update(delta : float):
 			continue
 		var avail = peer.get_available_bytes()
 		if avail > 0:
-			var res = peer.get_data(avail)   # [err, PoolByteArray]
+			var res = peer.get_data(min(avail, MAX_REQUEST_BYTES + 1))   # [err, PoolByteArray]
 			if res[0] == OK:
 				c["buf"] += res[1].get_string_from_utf8()
+		if c["buf"].to_utf8().size() > MAX_REQUEST_BYTES:
+			peer.put_data((JSON.print(_err("request exceeds 1 MiB")) + "\n").to_utf8())
+			peer.disconnect_from_host()
+			continue
 		var nl = c["buf"].find("\n")
 		while nl != -1:
 			var line = c["buf"].substr(0, nl).strip_edges()
@@ -127,6 +132,7 @@ func update(delta : float):
 			nl = c["buf"].find("\n")
 		still_open.append(c)
 	_conns = still_open
+	_advance_batch()
 	if not _pending_switch.empty():
 		# A map change reloads the mod. Release the listener before the new copy
 		# starts, after the current request has received its acknowledgement.
@@ -162,6 +168,8 @@ func _handle_line(peer : StreamPeerTCP, line : String):
 # Pre-edit state (transform / terrain splat) is captured before the command runs.
 func _record_and_dispatch(req : Dictionary) -> Dictionary:
 	var cmd = req.get("cmd", "")
+	if _active_batch != "" and not _executing_batch and not cmd in BATCH_READ_COMMANDS:
+		return _err("a batch is active; inspect or cancel it before other edits")
 
 	var pre = null
 	if cmd in TRANSFORM_CMDS and req.has("id"):
@@ -173,7 +181,7 @@ func _record_and_dispatch(req : Dictionary) -> Dictionary:
 	if cmd in TERRAIN_CMDS:
 		var lvl = Global.World.GetCurrentLevel()
 		if lvl != null:
-			terrain_before = lvl.Terrain.CloneSplatImage()
+			terrain_before = _terrain_snapshot()
 
 	var cave_before = null
 	if cmd in CAVE_CMDS:
@@ -211,7 +219,7 @@ func _build_op(cmd, req, result, pre, terrain_before, cave_before = null):
 	elif cmd in TERRAIN_CMDS and terrain_before != null:
 		var lvl = Global.World.GetCurrentLevel()
 		if lvl != null:
-			return { "kind": "terrain", "before": terrain_before, "after": lvl.Terrain.CloneSplatImage() }
+			return { "kind": "terrain", "before": terrain_before, "after": _terrain_snapshot() }
 	elif cmd in CAVE_CMDS and cave_before != null:
 		var after = _cave_snapshot()
 		if after != null:
@@ -312,14 +320,25 @@ func _apply_props(node, snap):
 		node.SetCustomColor(snap["color"])
 
 
-func _restore_splat(img):
-	if img == null:
+func _terrain_snapshot() -> Dictionary:
+	var terrain = Global.World.GetCurrentLevel().Terrain
+	var textures := []
+	for i in range(terrain.textures.size()):
+		textures.append(terrain.GetTexture(i))
+	return {"image": terrain.CloneSplatImage(), "image2": terrain.CloneSplatImage2() if terrain.ExpandedSlots else null, "textures": textures}
+
+
+func _restore_splat(snapshot):
+	if snapshot == null or Global.World.GetCurrentLevel() == null:
 		return
-	var level = Global.World.GetCurrentLevel()
-	if level == null:
-		return
-	level.Terrain.RestoreSplat(img)
-	level.Terrain.UpdateSplat()
+	var terrain = Global.World.GetCurrentLevel().Terrain
+	for i in range(snapshot["textures"].size()):
+		terrain.SetTexture(snapshot["textures"][i], i)
+	if snapshot["image2"] != null:
+		terrain.RestoreSplat2(snapshot["image"], snapshot["image2"])
+	else:
+		terrain.RestoreSplat(snapshot["image"])
+	terrain.UpdateSplat()
 
 
 # Deep-copy the cave BitMap for the undo stack (Resource.duplicate(true) so the
@@ -377,6 +396,9 @@ func _safe_dispatch(req : Dictionary) -> Dictionary:
 		"open_map": return _open_map(req)
 		"save_map": return _save_map(req)
 		"confirm_save": return _confirm_save(req)
+		"apply_batch": return _apply_batch(req)
+		"get_batch": return _get_batch(req)
+		"cancel_batch": return _cancel_batch(req)
 		"list_asset_categories": return _ok({ "categories": ASSET_CATEGORIES })
 		"list_assets": return _list_assets(req)
 		"list_elements": return _list_elements(req)
@@ -433,7 +455,7 @@ const ASSET_CATEGORIES := [
 const SUPPORTED_COMMANDS := [
 	"ping", "get_status", "get_map_info", "get_capabilities", "refresh_asset_catalog",
 	"list_asset_categories", "list_assets", "list_asset_metadata", "list_elements", "get_element", "list_levels",
-	"open_map", "save_map", "confirm_save", "place_object", "draw_wall", "draw_path", "add_light",
+	"apply_batch", "get_batch", "cancel_batch", "open_map", "save_map", "confirm_save", "place_object", "draw_wall", "draw_path", "add_light",
 	"add_portal", "add_roof", "add_text", "place_pattern", "build_room", "set_terrain_slot",
 	"fill_terrain", "fill_region", "paint_terrain", "paint_path", "dig_cave", "clear_caves",
 	"move_element", "modify_object", "duplicate_object", "delete_element", "add_level", "set_level",
@@ -488,6 +510,7 @@ func _get_capabilities() -> Dictionary:
 	return _ok({"protocol": PROTOCOL_VERSION, "bridge_instance": _instance_id,
 		"engine": Engine.get_version_info(),
 		"commands": SUPPORTED_COMMANDS, "asset_catalog_version": _catalog_version,
+		"batch": {"schema_version": BATCH_SCHEMA_VERSION, "commands": BATCH_FIELDS.keys(), "max_operations": MAX_BATCH_OPERATIONS, "max_jobs": MAX_BATCH_JOBS, "max_request_bytes": MAX_REQUEST_BYTES, "operations_per_frame": BATCH_OPERATIONS_PER_FRAME, "frame_budget_usec": BATCH_FRAME_BUDGET_USEC, "max_terrain_operations": 16},
 		"asset_counts": counts, "active_mods": Script.GetActiveMods()})
 
 
@@ -2088,3 +2111,259 @@ func _ensure_icon() -> String:
 		img.fill(Color(0.18, 0.55, 0.95))
 		img.save_png(path)
 	return path
+
+
+# Bounded native jobs. No scene lifecycle or irreversible edits in a batch.
+const BATCH_SCHEMA_VERSION := 1
+const MAX_BATCH_OPERATIONS := 500
+const MAX_BATCH_JOBS := 64
+const BATCH_OPERATIONS_PER_FRAME := 4
+const BATCH_FRAME_BUDGET_USEC := 8000
+const BATCH_FIELDS := {
+	"place_object": ["cmd", "asset", "x", "y", "scale", "rotation", "sorting", "color"],
+	"draw_wall": ["cmd", "asset", "points", "loop", "shadow", "type", "joint", "color"],
+	"draw_path": ["cmd", "asset", "points", "layer", "sorting", "width", "smoothness"],
+	"add_light": ["cmd", "x", "y", "asset", "energy", "range", "shadows", "color"],
+	"add_portal": ["cmd", "asset", "x", "y", "mount", "closed", "radius", "rotation"],
+	"fill_terrain": ["cmd", "slot", "asset"],
+	"paint_terrain": ["cmd", "slot", "asset", "x", "y", "radius", "rate"],
+	"paint_path": ["cmd", "slot", "asset", "points", "radius", "rate"],
+}
+const BATCH_CATEGORIES := {"place_object": "Objects", "draw_wall": "Walls", "draw_path": "Paths", "add_light": "Lights", "add_portal": "Portals", "fill_terrain": "Terrain", "paint_terrain": "Terrain", "paint_path": "Terrain"}
+const BATCH_READ_COMMANDS := ["ping", "get_status", "get_map_info", "get_capabilities", "list_assets", "list_asset_metadata", "list_asset_categories", "list_elements", "get_element", "list_levels", "get_camera", "apply_batch", "get_batch", "cancel_batch"]
+var _batch_jobs := {}
+var _batch_keys := {}
+var _active_batch := ""
+var _batch_sequence := 0
+var _executing_batch := false
+
+
+func _batch_number(value, low : float, high : float) -> bool:
+	return typeof(value) in [TYPE_INT, TYPE_REAL] and value >= low and value <= high
+
+
+func _batch_integer(value, low : int, high : int) -> bool:
+	return _batch_number(value, low, high) and floor(value) == value
+
+
+func _batch_point(point) -> bool:
+	return typeof(point) == TYPE_ARRAY and point.size() == 2 and _batch_number(point[0], 0, Global.World.WoxelDimensions.x) and _batch_number(point[1], 0, Global.World.WoxelDimensions.y)
+
+
+func _batch_validate(op) -> Array:
+	var errors := []
+	if typeof(op) != TYPE_DICTIONARY:
+		return ["operation must be an object"]
+	var cmd = op.get("cmd", "")
+	if typeof(cmd) != TYPE_STRING or not BATCH_FIELDS.has(cmd):
+		return ["unsupported batch command"]
+	for field in op:
+		if not field in BATCH_FIELDS[cmd]:
+			errors.append("unknown field: " + str(field))
+	if cmd in ["place_object", "add_light", "add_portal", "paint_terrain"]:
+		if not _batch_point([op.get("x"), op.get("y")]):
+			errors.append("x/y must be finite coordinates within the map")
+	if cmd in ["draw_wall", "draw_path", "paint_path"]:
+		var points = op.get("points")
+		if typeof(points) != TYPE_ARRAY or points.size() < 2 or points.size() > 32:
+			errors.append("points must contain 2..32 coordinate pairs")
+		else:
+			for i in range(points.size()):
+				if not _batch_point(points[i]):
+					errors.append("point " + str(i) + " is invalid or outside the map")
+				elif i > 0 and _batch_point(points[i - 1]) and Vector2(points[i][0], points[i][1]).distance_to(Vector2(points[i - 1][0], points[i - 1][1])) < 0.01:
+					errors.append("consecutive points must differ")
+			if cmd == "draw_wall" and op.get("loop", false) == true and points.size() < 3:
+				errors.append("looped walls require at least three points")
+	for field in ["loop", "shadow", "shadows", "closed"]:
+		if op.has(field) and typeof(op[field]) != TYPE_BOOL:
+			errors.append(field + " must be boolean")
+	var ranges := {"scale": [0.01, 10], "rotation": [-36000, 36000], "width": [0.01, 10], "smoothness": [0, 1], "energy": [0, 10], "range": [0.01, 10], "radius": [1, 1024], "rate": [0, 1]}
+	for field in ranges:
+		if op.has(field) and not _batch_number(op[field], ranges[field][0], ranges[field][1]):
+			errors.append(field + " is outside the batch limit")
+	for field in ["sorting", "layer", "type", "joint", "slot"]:
+		if op.has(field) and not _batch_integer(op[field], 0, 3):
+			errors.append(field + " must be an integer in 0..3")
+	if op.has("sorting") and not op["sorting"] in [0, 1]:
+		errors.append("sorting must be 0 or 1")
+	if cmd == "draw_wall" and (op.get("type", 0) != 0 or op.get("joint", 1) != 1):
+		errors.append("batch walls use native type 0 and joint 1")
+	if cmd == "add_portal" and op.get("mount") != "free":
+		errors.append("only explicit mount=free portals are reversible in a batch")
+	if op.has("color"):
+		var color = op["color"]
+		if typeof(color) == TYPE_STRING:
+			var hex = color.trim_prefix("#").to_lower()
+			var valid = hex.length() == 6
+			for i in range(hex.length()):
+				if "0123456789abcdef".find(hex.substr(i, 1)) == -1:
+					valid = false
+			if not valid:
+				errors.append("color string must be six hexadecimal digits")
+		elif typeof(color) == TYPE_ARRAY and color.size() in [3, 4]:
+			for component in color:
+				if not _batch_number(component, 0, 1):
+					errors.append("color components must be in 0..1")
+		else:
+			errors.append("invalid color")
+	if cmd in TERRAIN_CMDS:
+		var slot = op.get("slot", 0)
+		if _batch_integer(slot, 0, 3) and Global.World.GetCurrentLevel().Terrain.GetTexture(slot) == null:
+			errors.append("terrain slot must have a native texture for rollback")
+	var category = BATCH_CATEGORIES[cmd]
+	if cmd != "add_light" or op.has("asset"):
+		var asset = op.get("asset")
+		if typeof(asset) != TYPE_STRING or not _asset_catalog[category].has(asset):
+			errors.append("asset is not in the loaded " + category + " catalog")
+		elif _asset_tex(category, asset) == null:
+			errors.append("asset texture cannot be loaded")
+	return errors
+
+
+func _batch_canonical(value):
+	if typeof(value) == TYPE_DICTIONARY:
+		var result := {}
+		var keys = value.keys()
+		keys.sort()
+		for key in keys:
+			result[key] = _batch_canonical(value[key])
+		return result
+	if typeof(value) == TYPE_ARRAY:
+		var result := []
+		for item in value:
+			result.append(_batch_canonical(item))
+		return result
+	return value
+
+
+func _batch_summary(job : Dictionary, include_results : bool = true) -> Dictionary:
+	var result := {"accepted": true, "schema_version": BATCH_SCHEMA_VERSION, "job_id": job["job_id"], "bridge_instance": _instance_id, "idempotency_key": job["key"], "status": job["status"], "total": job["operations"].size(), "processed": job["next"], "rollback_remaining": job["rollback_ops"].size(), "atomicity": "rollback_on_failure_or_cancel", "max_frame_ms": job["max_frame_ms"]}
+	if include_results:
+		result["results"] = job["results"]
+	if job.has("error"):
+		result["error"] = job["error"]
+	return result
+
+
+func _apply_batch(req : Dictionary) -> Dictionary:
+	if req.get("schema_version") != BATCH_SCHEMA_VERSION:
+		return _err("unsupported batch schema_version")
+	var ops = req.get("operations")
+	var key = req.get("idempotency_key")
+	if typeof(ops) != TYPE_ARRAY or ops.empty() or ops.size() > MAX_BATCH_OPERATIONS:
+		return _err("operations must contain 1..500 entries")
+	if typeof(key) != TYPE_STRING or key.empty() or key.length() > 128:
+		return _err("idempotency_key must contain 1..128 characters")
+	var signature = JSON.print(_batch_canonical(ops))
+	if _batch_keys.has(key):
+		var previous = _batch_jobs[_batch_keys[key]]
+		if previous["signature"] != signature:
+			return _err("idempotency_key was already used with different operations")
+		return _ok(_batch_summary(previous))
+	if _active_batch != "" or not _pending_switch.empty():
+		return _err("another edit job or map switch is active")
+	if _batch_jobs.size() >= MAX_BATCH_JOBS:
+		return _err("this map instance retained 64 jobs; save and reload before submitting more")
+	var level = Global.World.GetCurrentLevel()
+	if level == null or bool(_master().get("IsBusy")):
+		return _err("map is unavailable or editor is busy")
+	_ensure_asset_catalog()
+	var errors := []
+	var terrain_count := 0
+	for i in range(ops.size()):
+		if typeof(ops[i]) == TYPE_DICTIONARY and ops[i].get("cmd") in TERRAIN_CMDS:
+			terrain_count += 1
+		for message in _batch_validate(ops[i]):
+			errors.append({"index": i, "error": message})
+	if terrain_count > 16:
+		errors.append({"index": -1, "error": "at most 16 terrain operations per batch"})
+	if not errors.empty():
+		return _ok({"accepted": false, "schema_version": BATCH_SCHEMA_VERSION, "validation_errors": errors})
+	_batch_sequence += 1
+	var id = _instance_id + ":" + str(_batch_sequence)
+	var job := {"job_id": id, "key": key, "signature": signature, "operations": ops.duplicate(true), "status": "queued", "next": 0, "results": [], "rollback_ops": [], "history_start": _undo_stack.size(), "redo_before": _redo_stack.duplicate(), "level_id": Global.World.CurrentLevelId, "max_frame_ms": 0.0, "cancel": false}
+	_batch_jobs[id] = job
+	_batch_keys[key] = id
+	_active_batch = id
+	return _ok(_batch_summary(job))
+
+
+func _get_batch(req : Dictionary) -> Dictionary:
+	var id = req.get("job_id", "")
+	if not _batch_jobs.has(id):
+		return _err("job is not retained in this map instance")
+	return _ok(_batch_summary(_batch_jobs[id], bool(req.get("include_results", true))))
+
+
+func _cancel_batch(req : Dictionary) -> Dictionary:
+	var id = req.get("job_id", "")
+	if not _batch_jobs.has(id):
+		return _err("job is not retained in this map instance")
+	var job = _batch_jobs[id]
+	if job["status"] in ["queued", "running"]:
+		job["cancel"] = true
+	return _ok(_batch_summary(job))
+
+
+func _finish_batch(job : Dictionary, status : String):
+	job["status"] = status
+	_active_batch = ""
+	job["redo_before"] = []
+
+
+func _rollback_batch(job : Dictionary, terminal_status : String):
+	job["terminal_status"] = terminal_status
+	job["status"] = "rolling_back"
+	job["rollback_ops"] = _undo_stack.slice(job["history_start"], _undo_stack.size() - 1) if _undo_stack.size() > job["history_start"] else []
+
+
+func _advance_batch():
+	if _active_batch == "":
+		return
+	var job = _batch_jobs[_active_batch]
+	if Global.World.GetCurrentLevel() == null or Global.World.CurrentLevelId != job["level_id"]:
+		job["error"] = "level changed outside the bridge; partial state cannot be rolled back safely"
+		_finish_batch(job, "failed_partial")
+		return
+	if job["cancel"] and job["status"] in ["queued", "running"]:
+		_rollback_batch(job, "cancelled")
+	var started = OS.get_ticks_usec()
+	var count := 0
+	while count < BATCH_OPERATIONS_PER_FRAME:
+		if job["status"] == "rolling_back":
+			if job["rollback_ops"].empty():
+				_redo_stack = job["redo_before"]
+				for result in job["results"]:
+					result["status"] = "rolled_back"
+				_finish_batch(job, job["terminal_status"])
+				break
+			var op = job["rollback_ops"].back()
+			if not _apply_op(op, true):
+				job["error"] = "rollback failed; inspect retained results before retrying"
+				_finish_batch(job, "failed_partial")
+				break
+			if op["kind"] == "create" and is_instance_valid(op["node"]):
+				op["node"].queue_free()
+			job["results"][job["rollback_ops"].size() - 1]["status"] = "rolled_back"
+			job["rollback_ops"].pop_back()
+			_undo_stack.pop_back()
+		else:
+			if job["next"] == job["operations"].size():
+				_finish_batch(job, "completed")
+				break
+			job["status"] = "running"
+			var index = job["next"]
+			_executing_batch = true
+			var response = _record_and_dispatch(job["operations"][index])
+			_executing_batch = false
+			if not response.get("ok", false):
+				job["error"] = {"index": index, "message": response.get("error", "operation failed")}
+				_rollback_batch(job, "failed")
+			else:
+				job["results"].append({"index": index, "cmd": job["operations"][index]["cmd"], "status": "applied", "result": response["result"]})
+				job["next"] += 1
+		count += 1
+		if OS.get_ticks_usec() - started >= BATCH_FRAME_BUDGET_USEC:
+			break
+	job["max_frame_ms"] = max(job["max_frame_ms"], float(OS.get_ticks_usec() - started) / 1000.0)

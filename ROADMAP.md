@@ -17,18 +17,19 @@ The source of truth is the specification plus its seed and asset selections. Kee
 
 ## What the MCP can do today
 
-The Python MCP server exposes **45 tools** in the Phase 1 source. They operate after Dungeondraft has loaded a map and started its mod scripts:
+The Python MCP server exposes **48 tools** in the Phase 2 source. They operate after Dungeondraft has loaded a map and started its mod scripts:
 
 | Area | Existing tools |
 | --- | --- |
 | Connection and discovery | `ping`, `get_status`, `get_map_info`, `get_capabilities`, `list_asset_categories`, `list_assets`, `list_asset_metadata`, `refresh_asset_catalog`, `list_elements`, `get_element`, `list_levels` |
+| Native batching | `apply_batch`, `get_batch`, `cancel_batch` |
 | Native maps | `open_map`, `save_map` |
 | Map elements | `place_object`, `draw_wall`, `draw_path`, `add_light`, `add_portal`, `add_roof`, `place_pattern`, `build_room`, `add_text` |
 | Terrain and caves | `set_terrain_slot`, `fill_terrain`, `fill_region`, `paint_terrain`, `paint_path`, `dig_cave`, `clear_caves` |
 | Changes and levels | `move_element`, `modify_object`, `duplicate_object`, `delete_element`, `add_level`, `set_level`, `select_elements`, `clear_selection`, `undo`, `redo` |
 | View and output | `get_camera`, `set_camera`, `focus_element`, `fit_elements`, `screenshot`, `export_map` |
 
-These tools cover tree placement and discovery, terrain paths, walls, rooms, previews, native map save/reopen, paged inspection, and basic asset metadata. A scripted client can call low-level tools repeatedly, but the model still has to coordinate each call; native batching remains Phase 2. Asset tags are inferred from filenames, not curated suitability data. Element bounds are visual geometry, not collision semantics. The bridge's undo stack is independent of Dungeondraft's UI history and does not cover every command. See [PROTOCOL.md](PROTOCOL.md) for exact behavior.
+These tools cover tree placement and discovery, terrain paths, walls, rooms, previews, native map save/reopen, paged inspection, and basic asset metadata. A scripted client can call low-level tools repeatedly, but the model still has to coordinate each call; native batching is implemented in Phase 2. Asset tags are inferred from filenames, not curated suitability data. Element bounds are visual geometry, not collision semantics. The bridge's undo stack is independent of Dungeondraft's UI history and does not cover every command. See [PROTOCOL.md](PROTOCOL.md) for exact behavior.
 
 ## Design rules
 
@@ -92,14 +93,25 @@ Map construction and discovery continue through the bridge.
 
 ## Phase 2 — Batch edits in the GDScript bridge
 
-- [ ] Add a versioned `apply_batch` command taking a bounded list of validated low-level operations. Start with objects, paths, terrain, walls, lights, and portals; extend only where needed.
-- [ ] Preflight the whole batch: command names, required fields, coordinates, map bounds, asset paths, and per-operation limits. Return structured validation errors before any edit.
-- [ ] Execute large batches over successive editor frames to keep Dungeondraft responsive. Expose `job_id`, progress, completion, and cancellation; cap work per frame and request size.
-- [ ] Return per-operation IDs and status. Add a caller-supplied idempotency key or job lookup so retries cannot duplicate trees after an uncertain timeout.
-- [ ] Define an atomicity policy. Prefer a prevalidated plan plus rollback of completed reversible edits on failure; explicitly report irreversible operations and partial application if full rollback is impossible.
-- [ ] Add performance and crash tests for 10/50/200 object batches and mixed terrain/path/object batches. Keep the TCP protocol responsive during work.
+- [x] Add a versioned `apply_batch` command taking a bounded list of validated low-level operations. Start with objects, paths, terrain, walls, lights, and portals; extend only where needed.
+- [x] Preflight the whole batch: command names, required fields, coordinates, map bounds, asset paths, and per-operation limits. Return structured validation errors before any edit.
+- [x] Execute large batches over successive editor frames to keep Dungeondraft responsive. Expose `job_id`, progress, completion, and cancellation; cap work per frame and request size.
+- [x] Return per-operation IDs and status. Add a caller-supplied idempotency key or job lookup so retries cannot duplicate trees after an uncertain timeout.
+- [x] Define an atomicity policy. Prefer a prevalidated plan plus rollback of completed reversible edits on failure; explicitly report irreversible operations and partial application if full rollback is impossible.
+- [x] Add performance and crash tests for 10/50/200 object batches and mixed terrain/path/object batches. Keep the TCP protocol responsive during work.
 
 **Exit:** One MCP request can place 50 planned trees around a road, returns all created IDs, and can be safely checked or retried.
+
+**Exit achieved (2026-10-02):** Protocol 20 / package 0.3.0 passed native
+10/50/200 jobs, idempotent replay/conflict rejection, concurrent edit rejection,
+responsive queries, object and mixed cancellation, identical terrain rollback
+PNG, native saving, checkpoint regression, and a fresh 48-tool stdio client.
+Console clean. See [PHASE2_REVIEW.md](PHASE2_REVIEW.md).
+
+**[PLAN CHANGED]** Portals are initially free-standing only. Mounted portal
+rollback also mutates wall membership and requires its own verification before
+being added. The batch does not lock native UI: `SuppressTool` stops mod updates.
+MCP mutations are guarded; leave the editor UI unchanged during execution.
 
 ## Phase 3 — Structured specification and procedural layout
 
