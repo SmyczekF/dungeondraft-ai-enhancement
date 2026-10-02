@@ -27,7 +27,7 @@ The [World reference](https://megasploot.github.io/DungeondraftModdingAPI/refere
 defines `CurrentLevelId` as a level ID. `list_levels` now finds its array index
 by matching each `Level.ID`, and reports both `current_index` and `current_id`.
 
-The Python MCP side uses MCP Python SDK v2 and exposes 48 tools in the Phase 2
+The Python MCP side uses MCP Python SDK v2 and exposes 54 tools in the Phase 3
 source. On the running
 Dungeondraft 1.2.0.1 instance, an MCP client completed `ping` (bridge protocol
 v16, Godot 3.4.2), `get_status`, `list_assets`, `place_object`, `delete_element`,
@@ -181,3 +181,21 @@ Terrain rollback now preserves `GetTexture`/`SetTexture`, `CloneSplatImage`, and
 default terrain, cancellation restored identical before/after PNG hashes. Expanded
 slots are implemented using the native API but were not separately tested live.
 See [PHASE2_REVIEW.md](PHASE2_REVIEW.md) for results and limitations.
+
+## Phase 3 water and structured layout (2026-10-02)
+
+Protocol 21 / package 0.4.0 exposes 54 tools. The installed native water
+`get_method_list()` reports `Save` with zero arguments, although the published
+[WaterMesh reference](https://megasploot.github.io/DungeondraftModdingAPI/reference/WaterMesh/)
+lists an optional copy argument. Calling it with that argument returned an
+object instead of serialized data in the probe. Production calls `Save()`;
+`Load(data)` restores polygon trees/colors. Creation, undo/redo, overlap
+restoration and mixed water/terrain cancellation passed on a fresh console
+session. Empty-first-water undo uses the public polygon subtraction operation.
+
+Polygon validation uses Godot 3.4 `segment_intersects_segment_2d` and
+`triangulate_polygon`; the unqualified segment method is not the 2D API.
+The pure Python planner uses strict Pydantic models and Shapely/GEOS geometry,
+with runtime versions recorded in each plan. Native terrain/water is shared
+per level, so initial full-map plans require no existing elements/water.
+See [PHASE3_REVIEW.md](PHASE3_REVIEW.md) for live acceptance and scope.

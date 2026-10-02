@@ -21,7 +21,7 @@ var script_class = "tool"
 
 const HOST := "127.0.0.1"
 const PORT := 8787
-const PROTOCOL_VERSION := 20
+const PROTOCOL_VERSION := 21
 const MAX_REQUEST_BYTES := 1048576
 const LISTENER_KEY := "dungeondraft_mcp.bridge_listener"
 
@@ -183,19 +183,23 @@ func _record_and_dispatch(req : Dictionary) -> Dictionary:
 		if lvl != null:
 			terrain_before = _terrain_snapshot()
 
+	var water_before = null
+	if cmd == "draw_water" and Global.World.GetCurrentLevel() != null:
+		water_before = Global.World.GetCurrentLevel().WaterMesh.Save().duplicate(true)
+
 	var cave_before = null
 	if cmd in CAVE_CMDS:
 		cave_before = _cave_snapshot()
 
 	var result = _safe_dispatch(req)
 	if typeof(result) == TYPE_DICTIONARY and result.get("ok", false):
-		var op = _build_op(cmd, req, result, pre, terrain_before, cave_before)
+		var op = _build_op(cmd, req, result, pre, terrain_before, cave_before, water_before)
 		if op != null:
 			_edit_sequence += 1
 			op["edit_id"] = _edit_sequence
 			_undo_stack.append(op)
 			_redo_stack = []   # a fresh edit invalidates the redo branch
-		if cmd in CREATE_CMDS or cmd in TRANSFORM_CMDS or cmd in TERRAIN_CMDS or cmd in CAVE_CMDS or cmd in ["delete_element", "place_pattern", "build_room", "set_terrain_slot", "add_level", "undo", "redo"]:
+		if cmd in CREATE_CMDS or cmd in TRANSFORM_CMDS or cmd in TERRAIN_CMDS or cmd in CAVE_CMDS or cmd == "draw_water" or cmd in ["delete_element", "place_pattern", "build_room", "set_terrain_slot", "add_level", "undo", "redo"]:
 			if op == null and not cmd in ["undo", "redo"]:
 				_unrecorded_revision += 1
 	return result
@@ -203,7 +207,7 @@ func _record_and_dispatch(req : Dictionary) -> Dictionary:
 
 # Returns an undo op for a recordable command, or null. Ops are reversed by
 # _apply_op (undo=true) and re-applied (undo=false).
-func _build_op(cmd, req, result, pre, terrain_before, cave_before = null):
+func _build_op(cmd, req, result, pre, terrain_before, cave_before = null, water_before = null):
 	if cmd in CREATE_CMDS:
 		var id = result["result"].get("id", -1)
 		if id != null and int(id) >= 0:
@@ -220,6 +224,8 @@ func _build_op(cmd, req, result, pre, terrain_before, cave_before = null):
 		var lvl = Global.World.GetCurrentLevel()
 		if lvl != null:
 			return { "kind": "terrain", "before": terrain_before, "after": _terrain_snapshot() }
+	elif cmd == "draw_water" and water_before != null:
+		return {"kind": "water", "before": water_before, "after": Global.World.GetCurrentLevel().WaterMesh.Save().duplicate(true), "points": _points(req["points"])}
 	elif cmd in CAVE_CMDS and cave_before != null:
 		var after = _cave_snapshot()
 		if after != null:
@@ -281,6 +287,13 @@ func _apply_op(op, undo : bool) -> bool:
 				_attach_node(op["node"], op["parent"], int(op["id"]))
 		"transform":
 			_apply_props(Global.World.GetNodeByID(int(op["id"])), op["old"] if undo else op["new"])
+		"water":
+			var mesh = Global.World.GetCurrentLevel().WaterMesh
+			var data = op["before"] if undo else op["after"]
+			if data.has("tree"):
+				mesh.Load(data)
+			else:
+				mesh.DrawPolygon(op["points"], true)
 		"terrain":
 			_restore_splat(op["before"] if undo else op["after"])
 		"cave":
@@ -387,6 +400,7 @@ func _safe_dispatch(req : Dictionary) -> Dictionary:
 	var cmd = req.get("cmd", "")
 	match cmd:
 		# --- read / query ---
+		"get_water": return _ok({"level_id": Global.World.CurrentLevelId, "data": Global.World.GetCurrentLevel().WaterMesh.Save()})
 		"ping": return _ok({ "pong": true, "protocol": PROTOCOL_VERSION, "bridge_instance": _instance_id, "engine": Engine.get_version_info() })
 		"get_status": return _get_status()
 		"get_map_info": return _get_map_info()
@@ -419,6 +433,7 @@ func _safe_dispatch(req : Dictionary) -> Dictionary:
 		# --- terrain ---
 		"set_terrain_slot": return _set_terrain_slot(req)
 		"fill_terrain": return _fill_terrain(req)
+		"draw_water": return _draw_water(req)
 		"fill_region": return _fill_region(req)
 		"paint_terrain": return _paint_terrain(req)
 		"paint_path": return _paint_path(req)
@@ -454,10 +469,10 @@ const ASSET_CATEGORIES := [
 ]
 const SUPPORTED_COMMANDS := [
 	"ping", "get_status", "get_map_info", "get_capabilities", "refresh_asset_catalog",
-	"list_asset_categories", "list_assets", "list_asset_metadata", "list_elements", "get_element", "list_levels",
+	"list_asset_categories", "list_assets", "list_asset_metadata", "list_elements", "get_element", "get_water", "list_levels",
 	"apply_batch", "get_batch", "cancel_batch", "open_map", "save_map", "confirm_save", "place_object", "draw_wall", "draw_path", "add_light",
 	"add_portal", "add_roof", "add_text", "place_pattern", "build_room", "set_terrain_slot",
-	"fill_terrain", "fill_region", "paint_terrain", "paint_path", "dig_cave", "clear_caves",
+	"fill_terrain", "fill_region", "draw_water", "paint_terrain", "paint_path", "dig_cave", "clear_caves",
 	"move_element", "modify_object", "duplicate_object", "delete_element", "add_level", "set_level",
 	"screenshot", "export_map", "get_camera", "set_camera", "focus_element", "fit_elements",
 	"undo", "redo", "select_elements", "clear_selection",
@@ -510,7 +525,7 @@ func _get_capabilities() -> Dictionary:
 	return _ok({"protocol": PROTOCOL_VERSION, "bridge_instance": _instance_id,
 		"engine": Engine.get_version_info(),
 		"commands": SUPPORTED_COMMANDS, "asset_catalog_version": _catalog_version,
-		"batch": {"schema_version": BATCH_SCHEMA_VERSION, "commands": BATCH_FIELDS.keys(), "max_operations": MAX_BATCH_OPERATIONS, "max_jobs": MAX_BATCH_JOBS, "max_request_bytes": MAX_REQUEST_BYTES, "operations_per_frame": BATCH_OPERATIONS_PER_FRAME, "frame_budget_usec": BATCH_FRAME_BUDGET_USEC, "max_terrain_operations": 16},
+		"batch": {"schema_version": BATCH_SCHEMA_VERSION, "commands": BATCH_FIELDS.keys(), "max_operations": MAX_BATCH_OPERATIONS, "max_jobs": MAX_BATCH_JOBS, "max_request_bytes": MAX_REQUEST_BYTES, "operations_per_frame": BATCH_OPERATIONS_PER_FRAME, "frame_budget_usec": BATCH_FRAME_BUDGET_USEC, "max_terrain_operations": 16, "max_water_operations": 16},
 		"asset_counts": counts, "active_mods": Script.GetActiveMods()})
 
 
@@ -2125,12 +2140,14 @@ const BATCH_FIELDS := {
 	"draw_path": ["cmd", "asset", "points", "layer", "sorting", "width", "smoothness"],
 	"add_light": ["cmd", "x", "y", "asset", "energy", "range", "shadows", "color"],
 	"add_portal": ["cmd", "asset", "x", "y", "mount", "closed", "radius", "rotation"],
+	"draw_water": ["cmd", "points", "erase"],
+	"fill_region": ["cmd", "slot", "asset", "points", "rate"],
 	"fill_terrain": ["cmd", "slot", "asset"],
 	"paint_terrain": ["cmd", "slot", "asset", "x", "y", "radius", "rate"],
 	"paint_path": ["cmd", "slot", "asset", "points", "radius", "rate"],
 }
 const BATCH_CATEGORIES := {"place_object": "Objects", "draw_wall": "Walls", "draw_path": "Paths", "add_light": "Lights", "add_portal": "Portals", "fill_terrain": "Terrain", "paint_terrain": "Terrain", "paint_path": "Terrain"}
-const BATCH_READ_COMMANDS := ["ping", "get_status", "get_map_info", "get_capabilities", "list_assets", "list_asset_metadata", "list_asset_categories", "list_elements", "get_element", "list_levels", "get_camera", "apply_batch", "get_batch", "cancel_batch"]
+const BATCH_READ_COMMANDS := ["ping", "get_status", "get_map_info", "get_capabilities", "list_assets", "list_asset_metadata", "list_asset_categories", "list_elements", "get_element", "get_water", "list_levels", "get_camera", "apply_batch", "get_batch", "cancel_batch"]
 var _batch_jobs := {}
 var _batch_keys := {}
 var _active_batch := ""
@@ -2163,7 +2180,7 @@ func _batch_validate(op) -> Array:
 	if cmd in ["place_object", "add_light", "add_portal", "paint_terrain"]:
 		if not _batch_point([op.get("x"), op.get("y")]):
 			errors.append("x/y must be finite coordinates within the map")
-	if cmd in ["draw_wall", "draw_path", "paint_path"]:
+	if cmd in ["draw_wall", "draw_path", "paint_path", "fill_region", "draw_water"]:
 		var points = op.get("points")
 		if typeof(points) != TYPE_ARRAY or points.size() < 2 or points.size() > 32:
 			errors.append("points must contain 2..32 coordinate pairs")
@@ -2175,7 +2192,9 @@ func _batch_validate(op) -> Array:
 					errors.append("consecutive points must differ")
 			if cmd == "draw_wall" and op.get("loop", false) == true and points.size() < 3:
 				errors.append("looped walls require at least three points")
-	for field in ["loop", "shadow", "shadows", "closed"]:
+	if cmd in ["fill_region", "draw_water"] and not _batch_polygon(op.get("points")):
+		errors.append("polygon must be simple with 3..32 unique vertices and positive area")
+	for field in ["loop", "shadow", "shadows", "closed", "erase"]:
 		if op.has(field) and typeof(op[field]) != TYPE_BOOL:
 			errors.append(field + " must be boolean")
 	var ranges := {"scale": [0.01, 10], "rotation": [-36000, 36000], "width": [0.01, 10], "smoothness": [0, 1], "energy": [0, 10], "range": [0.01, 10], "radius": [1, 1024], "rate": [0, 1]}
@@ -2211,7 +2230,9 @@ func _batch_validate(op) -> Array:
 		var slot = op.get("slot", 0)
 		if _batch_integer(slot, 0, 3) and Global.World.GetCurrentLevel().Terrain.GetTexture(slot) == null:
 			errors.append("terrain slot must have a native texture for rollback")
-	var category = BATCH_CATEGORIES[cmd]
+	if cmd == "draw_water":
+		return errors
+	var category = "Terrain" if cmd == "fill_region" else BATCH_CATEGORIES[cmd]
 	if cmd != "add_light" or op.has("asset"):
 		var asset = op.get("asset")
 		if typeof(asset) != TYPE_STRING or not _asset_catalog[category].has(asset):
@@ -2271,13 +2292,18 @@ func _apply_batch(req : Dictionary) -> Dictionary:
 	_ensure_asset_catalog()
 	var errors := []
 	var terrain_count := 0
+	var water_count := 0
 	for i in range(ops.size()):
 		if typeof(ops[i]) == TYPE_DICTIONARY and ops[i].get("cmd") in TERRAIN_CMDS:
 			terrain_count += 1
+		if typeof(ops[i]) == TYPE_DICTIONARY and ops[i].get("cmd") == "draw_water":
+			water_count += 1
 		for message in _batch_validate(ops[i]):
 			errors.append({"index": i, "error": message})
 	if terrain_count > 16:
 		errors.append({"index": -1, "error": "at most 16 terrain operations per batch"})
+	if water_count > 16:
+		errors.append({"index": -1, "error": "at most 16 water operations per batch"})
 	if not errors.empty():
 		return _ok({"accepted": false, "schema_version": BATCH_SCHEMA_VERSION, "validation_errors": errors})
 	_batch_sequence += 1
@@ -2367,3 +2393,48 @@ func _advance_batch():
 		if OS.get_ticks_usec() - started >= BATCH_FRAME_BUDGET_USEC:
 			break
 	job["max_frame_ms"] = max(job["max_frame_ms"], float(OS.get_ticks_usec() - started) / 1000.0)
+
+
+# Add a native water polygon. DrawPolygon's inverse erases just the added area;
+# loading the snapshot then restores any preexisting overlap. Load(empty Save)
+# alone is insufficient because native WaterMesh.Load ignores a missing tree.
+func _draw_water(req : Dictionary) -> Dictionary:
+	if Global.World.GetCurrentLevel() == null:
+		return _err("no map open")
+	var errors = _batch_validate({"cmd": "draw_water", "points": req.get("points"), "erase": req.get("erase", false)})
+	if not errors.empty():
+		return _err(JSON.print(errors))
+	var mesh = Global.World.GetCurrentLevel().WaterMesh
+	mesh.DrawPolygon(_points(req["points"]), bool(req.get("erase", false)))
+	return _ok({"water_added": not bool(req.get("erase", false)), "point_count": req["points"].size()})
+
+
+func _batch_polygon(points) -> bool:
+	if typeof(points) != TYPE_ARRAY or points.size() < 3 or points.size() > 32:
+		return false
+	for point in points:
+		if not _batch_point(point):
+			return false
+	var area := 0.0
+	for i in range(points.size()):
+		if not _batch_point(points[i]):
+			return false
+		var a = Vector2(points[i][0], points[i][1])
+		var next = points[(i + 1) % points.size()]
+		if not _batch_point(next):
+			return false
+		var b = Vector2(next[0], next[1])
+		area += a.cross(b)
+		for j in range(i + 1, points.size()):
+			if a.distance_to(Vector2(points[j][0], points[j][1])) < 0.01:
+				return false
+		for j in range(i + 1, points.size()):
+			if j == i + 1 or (i == 0 and j == points.size() - 1):
+				continue
+			var c = Vector2(points[j][0], points[j][1])
+			var d = Vector2(points[(j + 1) % points.size()][0], points[(j + 1) % points.size()][1])
+			if abs((b - a).cross(c - a)) < 0.01 and abs((b - a).cross(d - a)) < 0.01 and max(min(a.x, b.x), min(c.x, d.x)) <= min(max(a.x, b.x), max(c.x, d.x)) and max(min(a.y, b.y), min(c.y, d.y)) <= min(max(a.y, b.y), max(c.y, d.y)):
+				return false
+			if Geometry.segment_intersects_segment_2d(a, b, c, d) != null:
+				return false
+	return abs(area) > 1.0 and Geometry.triangulate_polygon(_points(points)).size() > 0

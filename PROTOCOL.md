@@ -40,8 +40,8 @@ Error:
 Coordinates are **woxel** (world pixel) space; map center is in
 `get_status -> map_center`. Every element is referenced by integer `id`
 (== Dungeondraft `node_id`); create commands return it, query commands list it.
-Protocol version 20 adds bounded native edit jobs to the save checkpoint and
-paged inspection API. The unsafe new-map command remains absent. Dungeondraft
+Protocol version 21 adds native water and polygon-region batching to the save
+checkpoint, inspection and bounded edit-job API. The unsafe new-map command remains absent. Dungeondraft
 loads mod scripts after a map opens, so the title screen has no bridge.
 
 ### Read / query
@@ -57,6 +57,7 @@ loads mod scripts after a map opens, so the title screen has no bridge.
 | `list_asset_metadata` | `category="Objects"`, `search=""`, `offset=0`, `limit=100` | Same pagination; asset entries include `path`, `category`, `tags[]`, `texture_pixels?`, `nominal_footprint_woxels?` |
 | `refresh_asset_catalog` | — | `{ asset_catalog_version }` |
 | `list_elements` | `kind="objects"`, `offset=0`, `limit=200` | `{ kind, offset, limit, total, count, elements[] }` |
+| `get_water` | — | `{ level_id, data }`; native water polygon tree/colors |
 | `get_element` | `id` | element descriptor |
 | `list_levels` | — | `{ current_index, current_id, levels[] }` |
 
@@ -212,7 +213,7 @@ The bridge keeps its **own** undo/redo stacks (it does not use Dungeondraft's
 `History.CreateCustomRecord`, which was unreliable in the previously tested
 build — see notes). Supported creates (`place_object`, `draw_wall`, `draw_path`,
 `add_light`, `add_portal`, `add_roof`, `add_text`, `duplicate_object`),
-`move_element`, `modify_object`, the four terrain paint/fill commands,
+`move_element`, `modify_object`, the four terrain paint/fill commands and native water,
 `dig_cave`, and `clear_caves` push an op; a fresh recorded edit clears the redo
 stack. Terrain ops snapshot the splat image before/after;
 `dig_cave` and `clear_caves` snapshot the cave `BitMap` the same way.
@@ -329,7 +330,7 @@ not recorded. This stack is independent of the user's Ctrl+Z in Dungeondraft.
   facing. The response `kind` is `"wall_portal"` when mounted, `"portal"` when
   freestanding.
 
-## Native batch jobs (protocol 20, schema v1)
+## Native batch jobs (protocol 21, schema v1)
 
 Wire request: `apply_batch` with `schema_version: 1`, `operations: [...]`, and
 `idempotency_key`. Each operation contains `cmd` and that command's parameters.
@@ -341,6 +342,7 @@ The MCP tool supplies the schema version and waits internally by default;
 | Operations | 1..500 |
 | UTF-8 request, including newline | 1 MiB |
 | Terrain operations | 16 |
+| Water operations | 16 |
 | Retained jobs per bridge instance | 64; never evicted silently |
 | Key | 1..128 characters |
 | Work per frame | Four operations or 8 ms between operations |
@@ -349,7 +351,7 @@ The MCP tool supplies the schema version and waits internally by default;
 A single terrain operation can exceed the frame budget. These are scheduling
 limits, not a guaranteed frame rate. This version supports `place_object`,
 `draw_wall` (type 0, joint 1), `draw_path`, `add_light`, `add_portal`
-(`mount=free` only), `fill_terrain`, `paint_terrain`, and `paint_path`.
+(`mount=free` only), `fill_terrain`, `paint_terrain`, `paint_path`, `fill_region` (points only), and `draw_water`.
 Assets must belong to the loaded category; only default lights may omit one.
 Unknown fields, invalid numeric/boolean/color values, missing assets and bounds
 errors return `accepted=false` plus indexed `validation_errors` before editing.
@@ -385,3 +387,27 @@ cannot provide a batch lock.
 Mounted portals, rooms/floor patterns, deletion, caves, lifecycle changes and
 other irreversible operations are excluded. Their existing low-level tools
 remain available. Extending batches requires a validated reversible edit record.
+
+## Native water (protocol 21)
+
+`draw_water(points, erase=false)` takes a simple polygon of 3..32 unique finite
+world-coordinate vertices inside map bounds. Repeated vertices, self
+intersections, intersecting/overlapping nonadjacent edges and degenerate areas
+are rejected. `erase=true` subtracts the polygon. Both are undo-recorded and
+batch-supported. Water is a shared mesh per level, not an element with an ID.
+The result reports `water_added` and `point_count`.
+
+The installed build registers **`WaterMesh.Save()` with zero arguments**, unlike
+the published optional-copy signature. Snapshots use that registered method and
+`Load(data)` to preserve prior polygons/colors, including overlaps. Before the
+first water edit, Save omits `tree`; undo erases the added polygon in that case.
+Water drawing may take longer than one frame's scheduling budget. A mixed
+cancellation test restored native water data and the original dry terrain PNG.
+
+`get_water` returns native serialized data; polygons are encoded by Dungeondraft
+as `PoolVector2Array(...)` strings. `ref` values are ephemeral native references,
+not stable semantic IDs. The planner uses conservative bounds for preexisting
+water and preserves independent gameplay metadata in its own manifest.
+
+The structured planner is a Python MCP layer; it does not add GDScript planning
+commands. See [MAP_SPEC.md](MAP_SPEC.md) for its schema/tools and lifecycle.

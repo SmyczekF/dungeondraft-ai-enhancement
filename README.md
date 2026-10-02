@@ -27,7 +27,7 @@ forwards calls as JSON. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
 > **Compatibility:** This version targets the installed Windows build,
 > **Dungeondraft 1.2.0.1**. Documented API calls were checked against the
 > published modding reference and a live 1.2.0.1 session. See
-> [API_COMPATIBILITY.md](API_COMPATIBILITY.md). It exposes 48 tools across
+> [API_COMPATIBILITY.md](API_COMPATIBILITY.md). It exposes 54 tools across
 > lifecycle, inspection, creation, terrain, editing, levels,
 > selection, capture, camera, and undo.
 
@@ -36,8 +36,16 @@ Phase 1's live acceptance procedure and current verification status are in
 
 Phase 2 batch acceptance and review steps are in [PHASE2_REVIEW.md](PHASE2_REVIEW.md).
 
+Phase 3 structured planning is described in [MAP_SPEC.md](MAP_SPEC.md) and
+[PHASE3_REVIEW.md](PHASE3_REVIEW.md).
+
 ## What the AI can do
 
+- **Plan:** `get_map_spec_schema`, `plan_battlemap`, `apply_battlemap`,
+  `get_battlemap` turn a strict tile-coordinate specification into a validated
+  deterministic layout and one native batch. The manifest preserves semantic
+  IDs, gameplay metadata and created editor IDs. See the
+  [forest ambush example](examples/forest-ambush.json).
 - **Inspect:** `get_status`, `list_levels`, `list_elements`, `get_element`,
   `get_map_info`, `get_capabilities`, `list_asset_categories`, `list_assets`,
   `list_asset_metadata` (paged paths, dimensions and filename tags).
@@ -61,6 +69,9 @@ Phase 2 batch acceptance and review steps are in [PHASE2_REVIEW.md](PHASE2_REVIE
   `add_portal`, `add_roof`, `add_text`, `place_pattern` (tiled floor shapes —
   wood planks, tile, brick — rendered below objects), `build_room` (a wall loop
   + matching floor on one shared path, like the UI's combined trace).
+- **Water:** `draw_water` adds or erases native water polygons; `get_water`
+  inspects their native serialized geometry/colors. Water and polygon terrain
+  regions are supported in reversible batches.
 - **Terrain:** `set_terrain_slot`, `fill_terrain` (whole level), `fill_region`
   (a rect/polygon, e.g. one room's floor), `paint_terrain` (a soft brush),
   `paint_path` (a smooth continuous stroke along a polyline — roads/trails).
@@ -103,7 +114,7 @@ PowerShell on Windows.
 On load you should see in the Dungeondraft log:
 
 ```
-[mcp-bridge] listening on 127.0.0.1:8787 (protocol v20)
+[mcp-bridge] listening on 127.0.0.1:8787 (protocol v21)
 ```
 
 ### 2. Install the MCP server

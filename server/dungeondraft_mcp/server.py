@@ -22,6 +22,8 @@ from mcp.server.mcpserver import MCPServer, Image
 from mcp.server.mcpserver.exceptions import ToolError
 
 from .bridge_client import BridgeClient, BridgeError
+from .layout.planning import Planner
+from .layout.spec import MapSpec
 
 HOST = os.environ.get("DD_BRIDGE_HOST", "127.0.0.1")
 PORT = int(os.environ.get("DD_BRIDGE_PORT", "8787"))
@@ -38,6 +40,8 @@ mcp = MCPServer(
     ),
 )
 bridge = BridgeClient(HOST, PORT)
+
+planner = Planner(bridge)
 
 _SCREENSHOT_PATH = os.path.join(tempfile.gettempdir(), "dd_mcp_screenshot.png")
 _EXPORT_PATH = os.path.join(tempfile.gettempdir(), "dd_mcp_export.png")
@@ -224,6 +228,52 @@ def cancel_batch(job_id: str) -> dict:
     """Cancel pending work and wait for rollback; already completed jobs are unchanged."""
     job = bridge.request("cancel_batch", job_id=job_id)
     return _wait_for_batch(job, 90)
+
+
+@mcp.tool()
+def get_water() -> dict:
+    """Inspect native serialized water geometry/colors in the current level."""
+    return bridge.request("get_water")
+
+
+@mcp.tool()
+def draw_water(points: list[list[float]], erase: bool = False) -> dict:
+    """Add a native water polygon in woxels; reversible through bridge undo."""
+    return bridge.request("draw_water", points=points, erase=erase)
+
+
+@mcp.tool()
+def get_map_spec_schema() -> dict:
+    """Return the strict JSON schema for grid-coordinate map_spec.v1."""
+    return MapSpec.model_json_schema()
+
+
+@mcp.tool()
+def plan_battlemap(spec: dict, include_operations: bool = False) -> dict:
+    """Dry run deterministic layout, asset selection, spacing and route validation.
+
+    No map edits. Size must match the open map. All coordinates in the spec use
+    tiles (256 woxels each). Returns errors or a retained plan_id, resolved
+    assets, semantic geometry, counts and warnings. See get_map_spec_schema.
+    """
+    return planner.plan(spec, include_operations)
+
+
+@mcp.tool()
+def apply_battlemap(plan_id: str, wait: bool = True) -> dict:
+    """Apply a validated retained plan as one reversible native batch.
+
+    Rejects stale map/catalog/instance context. Matching retries reuse the same
+    job. Returns per-feature semantic IDs mapped to created Dungeondraft IDs.
+    Plans are retained only by this MCP process; preserve output in a project.
+    """
+    return planner.apply(plan_id, wait)
+
+
+@mcp.tool()
+def get_battlemap(plan_id: str, include_operations: bool = False) -> dict:
+    """Inspect a retained plan and its last application manifest."""
+    return planner.describe(plan_id, include_operations)
 
 
 @mcp.tool()

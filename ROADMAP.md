@@ -17,11 +17,13 @@ The source of truth is the specification plus its seed and asset selections. Kee
 
 ## What the MCP can do today
 
-The Python MCP server exposes **48 tools** in the Phase 2 source. They operate after Dungeondraft has loaded a map and started its mod scripts:
+The Python MCP server exposes **54 tools** in the Phase 3 source. They operate after Dungeondraft has loaded a map and started its mod scripts:
 
 | Area | Existing tools |
 | --- | --- |
 | Connection and discovery | `ping`, `get_status`, `get_map_info`, `get_capabilities`, `list_asset_categories`, `list_assets`, `list_asset_metadata`, `refresh_asset_catalog`, `list_elements`, `get_element`, `list_levels` |
+| Structured planning | `get_map_spec_schema`, `plan_battlemap`, `apply_battlemap`, `get_battlemap` |
+| Native water | `draw_water`, `get_water` |
 | Native batching | `apply_batch`, `get_batch`, `cancel_batch` |
 | Native maps | `open_map`, `save_map` |
 | Map elements | `place_object`, `draw_wall`, `draw_path`, `add_light`, `add_portal`, `add_roof`, `place_pattern`, `build_room`, `add_text` |
@@ -115,16 +117,29 @@ MCP mutations are guarded; leave the editor UI unchanged during execution.
 
 ## Phase 3 — Structured specification and procedural layout
 
-- [ ] Define a versioned JSON schema (`map_spec.v1`) with size, grid units, seed, biome/theme, features, encounter zones, output settings, and optional asset overrides. Provide clear validation errors and a migration strategy for later schema versions.
-- [ ] Define semantic feature types for road, stream, terrain region, forest, building/room, cover, obstacle, hazard, entry, spawn, and clear area. Separate gameplay metadata from visual rendering parameters.
-- [ ] Implement a pure Python layout package that produces a deterministic, inspectable edit plan. Keep this logic outside GDScript; the bridge should execute edits, not reason about encounters.
-- [ ] Add bounded Poisson-disk placement for trees and rocks; spline or smoothed polyline generation for roads/streams; polygon clipping and margin checks for regions. Introduce noise only where it improves a specified visual result.
-- [ ] Enforce no-overlap zones, map margins, minimum spacing, and road/door/entry clearances. Validate that required routes remain connected after obstacles are placed.
-- [ ] Add asset selection rules with explicit fallback and warnings when a named material or biome asset is unavailable.
-- [ ] Expose `plan_battlemap(spec)` as a dry run and `apply_battlemap(plan_id or spec)` as the high-level edit action. Return feature IDs, warnings, counts, and a manifest that maps semantic IDs to Dungeondraft IDs.
-- [ ] Add focused helpers only for common iterative edits, such as `add_forest` or `create_road`; avoid multiple overlapping APIs for the same operation.
+- [x] Define a versioned JSON schema (`map_spec.v1`) with size, grid units, seed, biome/theme, features, encounter zones, output settings, and optional asset overrides. Provide clear validation errors and a migration strategy for later schema versions.
+- [x] Define semantic feature types for road, stream, terrain region, forest, building/room, cover, obstacle, hazard, entry, spawn, and clear area. Separate gameplay metadata from visual rendering parameters.
+- [x] Implement a pure Python layout package that produces a deterministic, inspectable edit plan. Keep this logic outside GDScript; the bridge should execute edits, not reason about encounters.
+- [x] Add bounded Poisson-disk placement for trees and rocks; spline or smoothed polyline generation for roads/streams; polygon clipping and margin checks for regions. Introduce noise only where it improves a specified visual result.
+- [x] Enforce no-overlap zones, map margins, minimum spacing, and road/door/entry clearances. Validate that required routes remain connected after obstacles are placed.
+- [x] Add asset selection rules with explicit fallback and warnings when a named material or biome asset is unavailable.
+- [x] Expose `plan_battlemap(spec)` as a dry run and `apply_battlemap(plan_id or spec)` as the high-level edit action. Return feature IDs, warnings, counts, and a manifest that maps semantic IDs to Dungeondraft IDs.
+- [PLAN CHANGED] Use the same validated feature schema for forest/road edits; do not add overlapping `add_forest` / `create_road` tool surfaces. Named-feature revision follows in Phase 4.
 
 **Exit:** A fixed forest-ambush spec and seed produce the same road, stream, forest, cover, and clear encounter spaces on repeated runs; the model makes a handful of high-level calls rather than placing each prop.
+
+**Exit achieved (2026-10-02):** Protocol 21 / package 0.4.0 passed nine
+pure-layout tests and a fresh 54-tool stdio client. The forest ambush dry run
+was repeatable, rejected changed map context, then applied 50 trees, two cover
+boulders, road, native stream and muddy region in one job. Replay reused IDs;
+native saving retained objects and water. Console clean; see
+[PHASE3_REVIEW.md](PHASE3_REVIEW.md).
+
+**[PLAN CHANGED]** Noise is omitted until a feature specifies a useful effect.
+Current variation comes from seeded placement/rotation and artwork. Regions use
+polygon intersection; roads/streams use a smoothed polyline and buffered geometry.
+Water and polygon terrain batching were added using native public APIs.
+Building floors use terrain rather than non-reversible floor-pattern batches.
 
 ## Phase 4 — Preview, validation, and targeted revision
 

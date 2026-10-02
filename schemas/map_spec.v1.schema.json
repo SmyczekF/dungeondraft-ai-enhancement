@@ -1,0 +1,714 @@
+{
+  "$defs": {
+    "Building": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "gameplay": {
+          "$ref": "#/$defs/Gameplay"
+        },
+        "type": {
+          "enum": [
+            "building",
+            "room"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "region": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "maxItems": 24,
+          "minItems": 3,
+          "title": "Region",
+          "type": "array"
+        },
+        "doors": {
+          "items": {
+            "$ref": "#/$defs/Door"
+          },
+          "maxItems": 8,
+          "title": "Doors",
+          "type": "array"
+        },
+        "wall_asset": {
+          "default": "stone",
+          "title": "Wall Asset",
+          "type": "string"
+        },
+        "floor_material": {
+          "default": "gravel",
+          "title": "Floor Material",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "region"
+      ],
+      "title": "Building",
+      "type": "object"
+    },
+    "ClearArea": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "gameplay": {
+          "$ref": "#/$defs/Gameplay"
+        },
+        "type": {
+          "const": "clear_area",
+          "title": "Type",
+          "type": "string"
+        },
+        "region": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "maxItems": 24,
+          "minItems": 3,
+          "title": "Region",
+          "type": "array"
+        },
+        "purpose": {
+          "default": "encounter",
+          "enum": [
+            "encounter",
+            "crossing"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "region"
+      ],
+      "title": "ClearArea",
+      "type": "object"
+    },
+    "Door": {
+      "additionalProperties": false,
+      "properties": {
+        "position": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Position",
+          "type": "array"
+        },
+        "width": {
+          "default": 1.5,
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Width",
+          "type": "number"
+        }
+      },
+      "required": [
+        "position"
+      ],
+      "title": "Door",
+      "type": "object"
+    },
+    "Encounter": {
+      "additionalProperties": false,
+      "properties": {
+        "required_routes": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "maxItems": 16,
+          "title": "Required Routes",
+          "type": "array"
+        },
+        "agent_radius": {
+          "default": 0.4,
+          "maximum": 2,
+          "minimum": 0.1,
+          "title": "Agent Radius",
+          "type": "number"
+        }
+      },
+      "title": "Encounter",
+      "type": "object"
+    },
+    "Forest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "gameplay": {
+          "$ref": "#/$defs/Gameplay"
+        },
+        "type": {
+          "const": "forest",
+          "title": "Type",
+          "type": "string"
+        },
+        "region": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "maxItems": 24,
+          "minItems": 3,
+          "title": "Region",
+          "type": "array"
+        },
+        "count": {
+          "maximum": 400,
+          "minimum": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "tree_types": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Tree Types",
+          "type": "array"
+        },
+        "scale": {
+          "default": 0.35,
+          "maximum": 3,
+          "minimum": 0.05,
+          "title": "Scale",
+          "type": "number"
+        },
+        "min_spacing": {
+          "default": 1.8,
+          "maximum": 16,
+          "minimum": 0.25,
+          "title": "Min Spacing",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "region",
+        "count"
+      ],
+      "title": "Forest",
+      "type": "object"
+    },
+    "Gameplay": {
+      "additionalProperties": false,
+      "properties": {
+        "movement_cost": {
+          "default": 1,
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Movement Cost",
+          "type": "number"
+        },
+        "cover": {
+          "default": "none",
+          "enum": [
+            "none",
+            "half",
+            "three_quarters",
+            "full"
+          ],
+          "title": "Cover",
+          "type": "string"
+        },
+        "blocks_movement": {
+          "default": false,
+          "title": "Blocks Movement",
+          "type": "boolean"
+        },
+        "notes": {
+          "default": "",
+          "maxLength": 1024,
+          "title": "Notes",
+          "type": "string"
+        }
+      },
+      "title": "Gameplay",
+      "type": "object"
+    },
+    "Output": {
+      "additionalProperties": false,
+      "properties": {
+        "ppi": {
+          "default": 64,
+          "maximum": 256,
+          "minimum": 16,
+          "title": "Ppi",
+          "type": "integer"
+        },
+        "grid": {
+          "default": false,
+          "title": "Grid",
+          "type": "boolean"
+        }
+      },
+      "title": "Output",
+      "type": "object"
+    },
+    "Prop": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "gameplay": {
+          "$ref": "#/$defs/Gameplay"
+        },
+        "type": {
+          "enum": [
+            "cover",
+            "obstacle",
+            "hazard"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "position": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Position",
+          "type": "array"
+        },
+        "radius": {
+          "default": 0.5,
+          "exclusiveMinimum": 0,
+          "maximum": 8,
+          "title": "Radius",
+          "type": "number"
+        },
+        "asset": {
+          "default": "boulder",
+          "title": "Asset",
+          "type": "string"
+        },
+        "scale": {
+          "default": 0.5,
+          "maximum": 3,
+          "minimum": 0.05,
+          "title": "Scale",
+          "type": "number"
+        },
+        "rotation": {
+          "default": 0,
+          "maximum": 360,
+          "minimum": -360,
+          "title": "Rotation",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "position"
+      ],
+      "title": "Prop",
+      "type": "object"
+    },
+    "Road": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "gameplay": {
+          "$ref": "#/$defs/Gameplay"
+        },
+        "type": {
+          "const": "road",
+          "title": "Type",
+          "type": "string"
+        },
+        "points": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "maxItems": 12,
+          "minItems": 2,
+          "title": "Points",
+          "type": "array"
+        },
+        "width": {
+          "default": 2,
+          "exclusiveMinimum": 0,
+          "maximum": 8,
+          "title": "Width",
+          "type": "number"
+        },
+        "material": {
+          "default": "dirt",
+          "title": "Material",
+          "type": "string"
+        },
+        "smooth": {
+          "default": true,
+          "title": "Smooth",
+          "type": "boolean"
+        },
+        "clearance": {
+          "default": 0.25,
+          "maximum": 4,
+          "minimum": 0,
+          "title": "Clearance",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "points"
+      ],
+      "title": "Road",
+      "type": "object"
+    },
+    "Size": {
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "maximum": 128,
+          "minimum": 8,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "maximum": 128,
+          "minimum": 8,
+          "title": "Height",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "title": "Size",
+      "type": "object"
+    },
+    "Stream": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "gameplay": {
+          "$ref": "#/$defs/Gameplay"
+        },
+        "type": {
+          "const": "stream",
+          "title": "Type",
+          "type": "string"
+        },
+        "points": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "maxItems": 12,
+          "minItems": 2,
+          "title": "Points",
+          "type": "array"
+        },
+        "width": {
+          "default": 1.5,
+          "exclusiveMinimum": 0,
+          "maximum": 8,
+          "title": "Width",
+          "type": "number"
+        },
+        "smooth": {
+          "default": true,
+          "title": "Smooth",
+          "type": "boolean"
+        },
+        "depth": {
+          "default": "shallow",
+          "enum": [
+            "shallow",
+            "deep"
+          ],
+          "title": "Depth",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "points"
+      ],
+      "title": "Stream",
+      "type": "object"
+    },
+    "TerrainRegion": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "gameplay": {
+          "$ref": "#/$defs/Gameplay"
+        },
+        "type": {
+          "const": "terrain_region",
+          "title": "Type",
+          "type": "string"
+        },
+        "region": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "maxItems": 24,
+          "minItems": 3,
+          "title": "Region",
+          "type": "array"
+        },
+        "material": {
+          "title": "Material",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "region",
+        "material"
+      ],
+      "title": "TerrainRegion",
+      "type": "object"
+    },
+    "Zone": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "gameplay": {
+          "$ref": "#/$defs/Gameplay"
+        },
+        "type": {
+          "enum": [
+            "entry",
+            "spawn"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "position": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Position",
+          "type": "array"
+        },
+        "radius": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "maximum": 8,
+          "title": "Radius",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "position"
+      ],
+      "title": "Zone",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "map_spec.v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "units": {
+      "const": "tiles",
+      "default": "tiles",
+      "title": "Units",
+      "type": "string"
+    },
+    "size": {
+      "$ref": "#/$defs/Size"
+    },
+    "seed": {
+      "maximum": 2147483647,
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "biome": {
+      "default": "temperate_forest",
+      "maxLength": 128,
+      "title": "Biome",
+      "type": "string"
+    },
+    "theme": {
+      "default": "",
+      "maxLength": 128,
+      "title": "Theme",
+      "type": "string"
+    },
+    "base_material": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "grass",
+      "title": "Base Material"
+    },
+    "margin": {
+      "default": 0.25,
+      "maximum": 4,
+      "minimum": 0,
+      "title": "Margin",
+      "type": "number"
+    },
+    "features": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "building": "#/$defs/Building",
+            "clear_area": "#/$defs/ClearArea",
+            "cover": "#/$defs/Prop",
+            "entry": "#/$defs/Zone",
+            "forest": "#/$defs/Forest",
+            "hazard": "#/$defs/Prop",
+            "obstacle": "#/$defs/Prop",
+            "road": "#/$defs/Road",
+            "room": "#/$defs/Building",
+            "spawn": "#/$defs/Zone",
+            "stream": "#/$defs/Stream",
+            "terrain_region": "#/$defs/TerrainRegion"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/Road"
+          },
+          {
+            "$ref": "#/$defs/Stream"
+          },
+          {
+            "$ref": "#/$defs/TerrainRegion"
+          },
+          {
+            "$ref": "#/$defs/Forest"
+          },
+          {
+            "$ref": "#/$defs/Prop"
+          },
+          {
+            "$ref": "#/$defs/ClearArea"
+          },
+          {
+            "$ref": "#/$defs/Zone"
+          },
+          {
+            "$ref": "#/$defs/Building"
+          }
+        ]
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Features",
+      "type": "array"
+    },
+    "encounter": {
+      "$ref": "#/$defs/Encounter"
+    },
+    "output": {
+      "$ref": "#/$defs/Output"
+    },
+    "asset_overrides": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "maxProperties": 32,
+      "title": "Asset Overrides",
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "size",
+    "seed",
+    "features"
+  ],
+  "title": "MapSpec",
+  "type": "object"
+}

@@ -16,12 +16,19 @@ The tools talk to a live Dungeondraft, not this repo. They only work when:
    also created manually; the bridge can reopen saved maps.
 
 If both aren't true, calls fail (connection refused, or `"no map open"`).
-**Verify first:** call `ping` (expect `pong` + protocol version 20), then
+**Verify first:** call `ping` (expect `pong` + protocol version 21), then
 `get_status` (expect `map_open: true` and a `map_center`). If `ping` fails, the
 mod isn't loaded or DD isn't running — ask the user to start it; don't retry
 blindly.
 
 ## Working with the map
+
+- Prefer `plan_battlemap` then `apply_battlemap` for complete encounters. Specs
+  use tiles, while low-level operations use woxels. Inspect warnings and
+  validation before applying. Keep the returned semantic/native-ID manifest.
+  Plans are retained by the MCP server process and tied to one editor instance
+  and level. Native editor UI should remain unchanged between plan and apply.
+
 
 - Prefer `apply_batch` for repetitive placement. Check `get_capabilities.batch`
   for supported commands and limits. Use a stable idempotency key and retain
