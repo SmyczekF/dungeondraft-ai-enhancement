@@ -59,8 +59,8 @@ class Planner:
 
     def context(self):
         ping = self.bridge.request("ping")
-        if ping["protocol"] != 22:
-            raise BridgeError("planner requires bridge protocol 22")
+        if ping["protocol"] != 23:
+            raise BridgeError("planner requires bridge protocol 23")
         status = self.bridge.request("get_status")
         if not status["map_open"]:
             raise BridgeError("load a map before planning")
@@ -168,6 +168,8 @@ class Planner:
             }
         manual = water_bounds(context["content"]["water"])
         for e in context["content"]["elements"]:
+            if e.get("kind") in ("light", "text"):
+                continue
             if e.get("bounds"):
                 a, b = e["bounds"]
                 manual.append(
@@ -423,7 +425,10 @@ class Planner:
             ids = {e["id"] for _, e in owned_elements(record["manifest"])}
             manual = []
             for descriptor in context["content"]["elements"]:
-                if descriptor["id"] not in ids:
+                if descriptor["id"] not in ids and descriptor.get("kind") not in (
+                    "light",
+                    "text",
+                ):
                     if not descriptor.get("bounds"):
                         raise BridgeError(
                             "manual element lacks bounds; cannot revise safely"

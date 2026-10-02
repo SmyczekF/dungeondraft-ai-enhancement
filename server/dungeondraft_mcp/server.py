@@ -1017,6 +1017,23 @@ def load_battlemap_project(directory: str) -> dict:
     return load_project(planner, directory)
 
 
+@mcp.tool()
+def export_battlemap(
+    plan_id: str, directory: str, foundry_image_path: str, ppi: Optional[int] = None
+) -> dict:
+    """Export native Universal VTT, PNG, Foundry 14 scene, import macro and semantics.
+
+    Requires a validated applied/restored project and a new absolute directory.
+    foundry_image_path is the relative uploaded PNG path inside Foundry, such as
+    maps/ambush/battlemap.png. Defaults to specification PPI; supports 20..256
+    within the native pixel budget. Camera, grid and lighting are restored.
+    Files only: no Foundry connection or import. Review target-runtime alignment.
+    """
+    from .layout.vtt import export_battlemap as export
+
+    return export(planner, plan_id, directory, foundry_image_path, ppi)
+
+
 def main() -> None:
     mcp.run()
 

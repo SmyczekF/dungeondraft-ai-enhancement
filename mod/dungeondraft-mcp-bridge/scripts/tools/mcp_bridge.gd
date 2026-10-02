@@ -21,7 +21,7 @@ var script_class = "tool"
 
 const HOST := "127.0.0.1"
 const PORT := 8787
-const PROTOCOL_VERSION := 22
+const PROTOCOL_VERSION := 23
 const MAX_REQUEST_BYTES := 1048576
 const LISTENER_KEY := "dungeondraft_mcp.bridge_listener"
 
@@ -436,7 +436,7 @@ func _safe_dispatch(req : Dictionary) -> Dictionary:
 		"get_surface_state": return _surface_state()
 		"get_export_status":
 			_refresh_export()
-			return _ok({"exporting": bool(_master().get("IsExporting")), "managed_export": not _export_state.empty(), "grid": Global.Editor.GridToggle.pressed})
+			return _ok({"exporting": bool(_master().get("IsExporting")), "managed_export": not _export_state.empty(), "grid": Global.Editor.GridToggle.pressed, "lighting": Global.Editor.LightingToggle.pressed})
 		"delete_object": return _delete_object(req)
 		"get_water": return _ok({"level_id": Global.World.CurrentLevelId, "data": Global.World.GetCurrentLevel().WaterMesh.Save()})
 		"ping": return _ok({ "pong": true, "protocol": PROTOCOL_VERSION, "bridge_instance": _instance_id, "engine": Engine.get_version_info() })
@@ -1766,16 +1766,28 @@ func _export_map(req : Dictionary) -> Dictionary:
 	if bool(_master().get("IsExporting")) or not _export_state.empty():
 		return _err("export already active")
 	if req.has("grid") and typeof(req["grid"]) != TYPE_BOOL: return _err("grid must be boolean")
-	_export_state = {"grid": Global.Editor.GridToggle.pressed}
+	if req.has("lighting") and typeof(req["lighting"]) != TYPE_BOOL: return _err("lighting must be boolean")
+	var format = req.get("format", "png")
+	if not format in ["png", "universalvtt"]: return _err("format must be png or universalvtt")
+	_export_state = {"grid": Global.Editor.GridToggle.pressed, "lighting": Global.Editor.LightingToggle.pressed}
 	if req.has("grid"):
 		Global.Editor.ToggleGrid(req["grid"])
-	Global.Exporter.Start(0, int(ppi), path)
+	if format == "universalvtt" or req.has("lighting"):
+		Global.World.SetSourceLevel(Global.World.CurrentLevelId)
+		_export_state["restore_levels"] = true
+	if req.has("lighting"):
+		Global.Editor.ToggleLighting(req["lighting"])
+	Global.Exporter.Start(3 if format == "universalvtt" else 0, int(ppi), path)
 	return _ok({"path": path, "ppi": ppi, "pixels": _vec(pixels), "async": true})
 
 
 func _refresh_export():
 	if not _export_state.empty() and not bool(_master().get("IsExporting")):
 		Global.Editor.ToggleGrid(_export_state["grid"])
+		if _export_state.get("restore_levels", false):
+			# ToggleLighting requires SourceLevel; restore it before clearing export levels.
+			Global.Editor.ToggleLighting(_export_state["lighting"])
+			Global.World.RestoreLevelsPostExport()
 		_export_state = {}
 
 
@@ -2236,7 +2248,7 @@ const BATCH_FIELDS := {
 	"paint_path": ["cmd", "slot", "asset", "points", "radius", "rate"],
 }
 const BATCH_CATEGORIES := {"place_object": "Objects", "draw_wall": "Walls", "draw_path": "Paths", "add_light": "Lights", "add_portal": "Portals", "fill_terrain": "Terrain", "paint_terrain": "Terrain", "paint_path": "Terrain"}
-const BATCH_READ_COMMANDS := ["ping", "get_status", "get_map_info", "get_capabilities", "list_assets", "list_asset_metadata", "list_asset_categories", "list_elements", "get_element", "get_water", "list_levels", "get_camera", "apply_batch", "get_batch", "cancel_batch"]
+const BATCH_READ_COMMANDS := ["get_export_status", "ping", "get_status", "get_map_info", "get_capabilities", "list_assets", "list_asset_metadata", "list_asset_categories", "list_elements", "get_element", "get_water", "list_levels", "get_camera", "apply_batch", "get_batch", "cancel_batch"]
 var _batch_jobs := {}
 var _batch_keys := {}
 var _active_batch := ""

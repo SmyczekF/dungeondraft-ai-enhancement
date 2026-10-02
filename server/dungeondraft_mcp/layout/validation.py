@@ -172,7 +172,11 @@ def validate(plan, manifest, context, surface=None):
                 )
     manual = []
     for ident, descriptor in live.items():
-        if ident not in owned and descriptor.get("bounds"):
+        if (
+            ident not in owned
+            and descriptor.get("kind") not in ("light", "text")
+            and descriptor.get("bounds")
+        ):
             a, b = descriptor["bounds"]
             manual.append(box(a[0] / 256, a[1] / 256, b[0] / 256, b[1] / 256))
     # Unowned content is conservatively treated as blocking; artwork alone cannot
@@ -244,5 +248,5 @@ def validate(plan, manifest, context, surface=None):
             "status": "required",
             "checks": ["clipping", "readability", "artwork suitability"],
         },
-        "manual_geometry_policy": "unowned element bounds are conservative obstacles",
+        "manual_geometry_policy": "unowned element bounds except lights/text are conservative obstacles",
     }

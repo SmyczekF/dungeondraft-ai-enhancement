@@ -27,8 +27,8 @@ The [World reference](https://megasploot.github.io/DungeondraftModdingAPI/refere
 defines `CurrentLevelId` as a level ID. `list_levels` now finds its array index
 by matching each `Level.ID`, and reports both `current_index` and `current_id`.
 
-The Python MCP side uses MCP Python SDK v2 and exposes 54 tools in the Phase 3
-source. On the running
+The Python MCP side uses MCP Python SDK v2 and currently exposes 60 tools (package 0.6.0 /
+protocol 23). Historical phase results below record their tested versions. On the running
 Dungeondraft 1.2.0.1 instance, an MCP client completed `ping` (bridge protocol
 v16, Godot 3.4.2), `get_status`, `list_assets`, `place_object`, `delete_element`,
 `list_elements`, `fill_terrain`, `paint_path`, `screenshot`, and `export_map`.
@@ -199,3 +199,14 @@ The pure Python planner uses strict Pydantic models and Shapely/GEOS geometry,
 with runtime versions recorded in each plan. Native terrain/water is shared
 per level, so initial full-map plans require no existing elements/water.
 See [PHASE3_REVIEW.md](PHASE3_REVIEW.md) for live acceptance and scope.
+
+## Phase 5 native VTT lifecycle (2026-10-02)
+
+The installed Exporter matches documented mode 3 for Universal VTT. It needs
+public World.SetSourceLevel before metadata serialization; the normal export
+dialog performs that setup. Editor.ToggleLighting(true) needs the same source
+level, so restore lighting before World.RestoreLevelsPostExport clears it.
+Corrected ordering passed native wall/portal/light export and a fresh editor
+restart with empty stderr. Native VTT 0.3 uses tile-coordinate LOS/portal/light
+positions, ARGB color strings and tile light radii. See PHASE5_REVIEW.md for
+Foundry 14 mapping and the explicit pending target-runtime review.

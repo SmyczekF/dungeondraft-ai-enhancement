@@ -28,12 +28,12 @@ async def main():
     exe = repo / ".venv/Scripts/dungeondraft-mcp.exe"
     async with Client(StdioServerParameters(command=str(exe))) as client:
         tools = (await client.list_tools()).tools
-        assert len(tools) == 54
+        assert len(tools) == 60
 
         async def call(name, **params):
             return data(await client.call_tool(name, params))
 
-        assert (await call("ping"))["protocol"] == 21
+        assert (await call("ping"))["protocol"] == 23
         assert not any((await call("get_status"))["counts"].values())
         schema = await call("get_map_spec_schema")
         assert schema["additionalProperties"] is False

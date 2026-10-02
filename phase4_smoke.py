@@ -34,8 +34,8 @@ async def main():
             return data(await client.call_tool(name, params))
 
         tools = (await client.list_tools()).tools
-        assert len(tools) == 59, len(tools)
-        assert (await call("ping"))["protocol"] == 22
+        assert len(tools) == 60, len(tools)
+        assert (await call("ping"))["protocol"] == 23
         assert (await call("get_status"))["map_open"]
         loaded = await call(
             "load_battlemap_project", directory=str(args.project.resolve())
@@ -50,7 +50,7 @@ async def main():
         assert max(meta["preview"]["pixels"]) <= 1024
         assert meta["preview"]["camera_restored"] and meta["preview"]["grid_restored"]
         report["checks"].append(
-            "fresh 59-tool client, project ownership reload, structural validation and native PNG content with restored camera/grid"
+            "fresh 60-tool client, project ownership reload, structural validation and native PNG content with restored camera/grid"
         )
         native = BridgeClient()
         manual = (

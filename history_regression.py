@@ -32,7 +32,7 @@ def main() -> None:
     checks = []
     try:
         ping = bridge.request("ping")
-        assert ping["protocol"] == 18
+        assert ping["protocol"] == 23
         status = bridge.request("get_status")
         assert status["map_open"] and not any(status["counts"].values()), status
         checks.append({"check": "blank_map", "active_tool": status["active_tool"]})

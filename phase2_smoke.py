@@ -43,7 +43,7 @@ def preview(name):
 
 
 try:
-    assert b.request('ping')['protocol'] == 21
+    assert b.request('ping')['protocol'] == 23
     status = b.request('get_status')
     assert not any(status['counts'].values())
     width, height = status['map_size_woxels']

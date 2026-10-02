@@ -17,7 +17,7 @@ The source of truth is the specification plus its seed and asset selections. Kee
 
 ## What the MCP can do today
 
-The Python MCP server exposes **59 tools** in the Phase 4 source. They operate after Dungeondraft has loaded a map and started its mod scripts:
+The Python MCP server exposes **60 tools** in the Phase 5 source. They operate after Dungeondraft has loaded a map and started its mod scripts:
 
 | Area | Existing tools |
 | --- | --- |
@@ -30,6 +30,7 @@ The Python MCP server exposes **59 tools** in the Phase 4 source. They operate a
 | Map elements | `place_object`, `draw_wall`, `draw_path`, `add_light`, `add_portal`, `add_roof`, `place_pattern`, `build_room`, `add_text` |
 | Terrain and caves | `set_terrain_slot`, `fill_terrain`, `fill_region`, `paint_terrain`, `paint_path`, `dig_cave`, `clear_caves` |
 | Changes and levels | `move_element`, `modify_object`, `duplicate_object`, `delete_element`, `add_level`, `set_level`, `select_elements`, `clear_selection`, `undo`, `redo` |
+| Optional VTT files | `export_battlemap` |
 | View and output | `get_camera`, `set_camera`, `focus_element`, `fit_elements`, `screenshot`, `export_map` |
 
 These tools cover tree placement and discovery, terrain paths, walls, rooms, previews, native map save/reopen, paged inspection, and basic asset metadata. A scripted client can call low-level tools repeatedly, but the model still has to coordinate each call; native batching is implemented in Phase 2. Asset tags are inferred from filenames, not curated suitability data. Element bounds are visual geometry, not collision semantics. The bridge's undo stack is independent of Dungeondraft's UI history and does not cover every command. See [PROTOCOL.md](PROTOCOL.md) for exact behavior.
@@ -167,13 +168,27 @@ requires regeneration. Pixel review remains separate from structural checks.
 
 ## Phase 5 — Foundry VTT export (separate integration)
 
-- [ ] Choose the target Foundry version and supported wall/light/scene schema when implementation begins; do not hardcode an unverified current format.
-- [ ] Export the battlemap image plus grid size, scene dimensions, walls, doors, lights, and optional encounter metadata from the semantic specification and final Dungeondraft geometry.
-- [ ] Transform coordinates from Dungeondraft woxels to exported image pixels and Foundry scene coordinates; test scale and alignment on known landmarks.
-- [ ] Keep Foundry export optional. First deliver files for import; add direct Foundry API integration only if there is a clear workflow for credentials, version handling, and verification.
+- [x] Choose the target Foundry version and supported wall/light/scene schema when implementation begins; do not hardcode an unverified current format.
+- [x] Export the battlemap image plus grid size, scene dimensions, walls, doors, lights, and optional encounter metadata from the semantic specification and final Dungeondraft geometry.
+- [x] Transform coordinates from Dungeondraft woxels to exported image pixels and Foundry scene coordinates; test scale and alignment on known landmarks.
+- [x] Keep Foundry export optional. First deliver files for import; add direct Foundry API integration only if there is a clear workflow for credentials, version handling, and verification.
 
 **Exit:** An imported scene aligns its grid, walls, doors, and lights with the rendered map, and semantic encounter data remains available independently of the image.
 
+**File milestone achieved (2026-10-02):** Protocol 23 / package 0.6.0 exposes
+60 tools. Native Universal VTT 0.3, PNG extraction, Foundry 14 scene/level data,
+import macro, walls/doors/lights and separate encounter metadata passed 24 pure
+tests and fresh-editor MCP acceptance. Known landmarks aligned, camera/grid/
+lighting restored, and captured native logs were clean. See [PHASE5_REVIEW.md](PHASE5_REVIEW.md).
+
+**[PLAN CHANGED]** End-to-end Foundry 14 import review remains pending: installed
+Foundry is 13.348, while current public schema is generation 14. Files and
+coordinate conversion are verified; actual target-runtime scene creation,
+rendering, movement and vision are not claimed. Export is single-level; native
+portals default to doors with a review warning, and light rendering is an
+explicit approximation. Direct server deployment and game-system rules are
+excluded from this file milestone.
+
 ## First implementation slice
 
-The immediate proof is **MCP generation of the ten-tree path sample on a manually created blank map**. Phase 1 provides save/reopen and inspection; Phase 2 adds bounded native batching. The `phase1_smoke.py` runner verifies native save/reopen, exact tree IDs/assets, pagination, and PNG export before Phase 1 is accepted.
+The initial proof was **MCP generation of the ten-tree path sample on a manually created blank map**. Phase 1 provides save/reopen and inspection; Phase 2 adds bounded native batching. The `phase1_smoke.py` runner verifies native save/reopen, exact tree IDs/assets, pagination, and PNG export before Phase 1 is accepted.

@@ -83,7 +83,8 @@ the achieved count and bounded attempts; it does not quietly reduce density.
 
 Whole-map terrain/water/building plans require no existing elements or water.
 For additive forest/props, set `base_material=null`. Existing manual element and
-water bounds are conservatively reserved. Shared terrain slots make arbitrary
+water bounds are conservatively reserved. Decorative lights and text are
+excluded from movement/collision bounds. Shared terrain slots make arbitrary
 additive painting unsafe without ownership, so that case is rejected explicitly.
 Rooms use terrain floors and open wall gaps, not mounted door portals, roofs or
 pattern floors. These remain available through existing low-level tools.
@@ -91,3 +92,13 @@ pattern floors. These remain available through existing low-level tools.
 Schema changes require a new explicit version. Unsupported versions are
 rejected. Future migrations must be intentional adapters with tests; this fork
 does not silently accept old schemas or guess changed coordinate units.
+
+## Optional VTT files
+
+After application or project restoration, `export_battlemap` uses the native
+current geometry plus semantic blockers to write Universal VTT, PNG, Foundry 14
+scene/import macro and independent encounter metadata. Coordinates remain tiles
+in metadata; scene coordinates are tiles times export PPI. Requires a new
+absolute directory, a relative Foundry PNG path and a single-level native map.
+See [PHASE5_REVIEW.md](PHASE5_REVIEW.md) for limits and import review. Successful
+file export does not claim an actual Foundry 14 import.

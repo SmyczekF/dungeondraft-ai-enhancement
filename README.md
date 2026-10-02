@@ -27,7 +27,7 @@ forwards calls as JSON. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
 > **Compatibility:** This version targets the installed Windows build,
 > **Dungeondraft 1.2.0.1**. Documented API calls were checked against the
 > published modding reference and a live 1.2.0.1 session. See
-> [API_COMPATIBILITY.md](API_COMPATIBILITY.md). It exposes 59 tools across
+> [API_COMPATIBILITY.md](API_COMPATIBILITY.md). It exposes 60 tools across
 > lifecycle, inspection, creation, terrain, editing, levels,
 > selection, capture, camera, and undo.
 
@@ -42,6 +42,9 @@ Phase 3 structured planning is described in [MAP_SPEC.md](MAP_SPEC.md) and
 Phase 4 projects, validation and named revisions are documented in
 [PHASE4_REVIEW.md](PHASE4_REVIEW.md).
 
+Phase 5 optional Universal VTT and Foundry 14 files are documented in
+[PHASE5_REVIEW.md](PHASE5_REVIEW.md). Target-runtime import review is pending.
+
 ## What the AI can do
 
 - **Plan:** `get_map_spec_schema`, `plan_battlemap`, `apply_battlemap`,
@@ -54,6 +57,13 @@ Phase 4 projects, validation and named revisions are documented in
   native maps, specifications, seeds, resolved assets and semantic IDs together.
   Revisions preserve manual objects and report ownership conflicts. Use the new
   plan ID after revision.
+- **VTT files:** `export_battlemap` writes native Universal VTT, its PNG, a
+  Foundry 14 scene/import macro and encounter metadata into a new folder.
+  Supply a relative uploaded PNG path (e.g. `maps/ambush/battlemap.png`).
+  Requires a validated applied/restored project on a single-level map. It
+  restores camera/grid/lighting and leaves Foundry import to your normal file
+  workflow. No extra MCP server or TOML configuration is required. See
+  [Phase 5 review and import instructions](PHASE5_REVIEW.md).
 - **Inspect:** `get_status`, `list_levels`, `list_elements`, `get_element`,
   `get_map_info`, `get_capabilities`, `list_asset_categories`, `list_assets`,
   `list_asset_metadata` (paged paths, dimensions and filename tags).
@@ -122,7 +132,7 @@ PowerShell on Windows.
 On load you should see in the Dungeondraft log:
 
 ```
-[mcp-bridge] listening on 127.0.0.1:8787 (protocol v21)
+[mcp-bridge] listening on 127.0.0.1:8787 (protocol v23)
 ```
 
 ### 2. Install the MCP server

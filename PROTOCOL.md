@@ -435,3 +435,20 @@ by the Python project renderer. `get_map_info` also reports `exporting`.
 
 Project/specification/manifest persistence and revision diffs live in Python,
 not in a second native protocol. See PHASE4_REVIEW.md. No client config changed.
+
+## Universal VTT native export (protocol 23)
+
+`export_map` also accepts `format: "png" | "universalvtt"` (PNG default) and
+optional boolean `lighting`. All inputs are checked before changing editor
+state. Universal VTT uses native mode 3 and the current source level, with
+`SetSourceLevel` before export and `RestoreLevelsPostExport` after completion.
+If lighting is requested, its restoration happens while SourceLevel is still
+valid. Clearing SourceLevel before ToggleLighting(true) caused a native null
+exception in the probe and is not safe.
+
+`get_export_status` is read-only during export and returns
+`{exporting, managed_export, grid, lighting}`. It refreshes completed restoration.
+The higher-level Python `export_battlemap` tool uses unbaked native VTT export,
+validates JSON/image resolution and restores camera/grid/lighting. It supports
+single-level owned projects and optional Foundry 14 files; see PHASE5_REVIEW.md.
+Native VTT coordinates and light ranges are tiles, not woxels or pixels.

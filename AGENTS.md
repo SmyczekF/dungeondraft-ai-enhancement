@@ -12,17 +12,23 @@ The tools talk to a live Dungeondraft, not this repo. They only work when:
 
 1. **Dungeondraft is running** with the forked **MCP Bridge mod enabled**, and
 2. **a map is open**. Dungeondraft loads tool mods only after a map loads, so a
-   human must open or create a map after starting the app. New blank maps are
-   also created manually; the bridge can reopen saved maps.
+   map must load after starting the app. Create new blank dimensions manually,
+   or start an existing native template with the external launcher. The bridge
+   can reopen saved maps.
 
 If both aren't true, calls fail (connection refused, or `"no map open"`).
-**Verify first:** call `ping` (expect `pong` + protocol version 22), then
+**Verify first:** call `ping` (expect `pong` + protocol version 23), then
 `get_status` (expect `map_open: true` and a `map_center`). If `ping` fails, the
 mod isn't loaded or DD isn't running — ask the user to start it; don't retry
 blindly.
 
 ## Working with the map
 
+- `export_battlemap` writes optional Universal VTT / Foundry 14 files only.
+  It requires a validated applied/restored project on a single-level map and
+  a new directory. Supply the intended relative Foundry PNG path. Native images
+  are unbaked; review door types/ambient lighting and perform target-runtime
+  import separately. File export does not prove a Foundry scene was imported.
 - Use `render_preview` and `validate_battlemap` after applying a plan. Pixel
   review and structural connectivity are separate checks. Save reproducible
   bundles with `save_battlemap_project`. After restarting MCP/editor, open the
@@ -31,7 +37,7 @@ blindly.
   run returns the diff. Retain the new plan ID. Manual terrain changes cause
   ownership conflicts. Stream/building shared geometry is currently excluded.
 - Exports are bounded to 16 megapixels / 8192 pixels per side. Wait for native
-  export completion before editing; previews restore grid and camera.
+  export completion before editing; VTT exports restore grid, lighting and camera.
 
 
 - Prefer `plan_battlemap` then `apply_battlemap` for complete encounters. Specs
@@ -87,7 +93,9 @@ If you change code (not just drive the map), the two halves reload differently:
   loaded scripts while preserving instance state; it does not rerun `start()`.
   Use it for changes to existing handlers. Newly added script files, startup
   initialization, and new instance state need a fresh Dungeondraft launch and
-  manual first-map load. Ask the user to perform that launch; do not assume a
+  first-map load (a prepared native template can be launched externally).
+  Follow session authorization for starting/closing disposable apps; ask when
+  it is missing. Do not assume a
   new startup probe ran just because Reload Mods was clicked.
 - **Server** (`server/dungeondraft_mcp/server.py`): new/changed `@mcp.tool()`
   definitions need a **Codex MCP server restart**. Restart Codex after changing
