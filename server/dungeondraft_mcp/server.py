@@ -77,7 +77,7 @@ def _wait_for_native_json(path: Path, previous_mtime_ns: int | None, timeout: fl
     raise BridgeError(f"native map did not finish saving within {timeout:.0f}s ({path}): {last_error}")
 
 
-def _wait_for_map(*, previous_instance: str, path: str | None = None, size: tuple[int, int] | None = None, timeout: float = 90.0) -> dict:
+def _wait_for_map(*, previous_instance: str, path: str, timeout: float = 90.0) -> dict:
     """Wait through Dungeondraft's scene/mod reload and return the ready map."""
     deadline = time.monotonic() + timeout
     last_error = "map did not become ready"
@@ -87,8 +87,6 @@ def _wait_for_map(*, previous_instance: str, path: str | None = None, size: tupl
             if info.get("map_open") and not info.get("loading") and info.get("bridge_instance") != previous_instance:
                 if path is not None and os.path.normcase(info.get("path", "")) != os.path.normcase(path):
                     last_error = f"loaded unexpected path: {info.get('path')}"
-                elif size is not None and info.get("size_tiles") != list(size):
-                    last_error = f"loaded unexpected size: {info.get('size_tiles')}"
                 else:
                     return info
         except BridgeError as exc:
@@ -135,18 +133,8 @@ def get_map_info() -> dict:
 
 @mcp.tool()
 def get_capabilities() -> dict:
-    """Report bridge protocol, Dungeondraft build, commands, mods, and asset catalog version/counts."""
+    """Report bridge protocol, Godot engine version, commands, mods, and asset catalog version/counts."""
     return bridge.request("get_capabilities")
-
-
-@mcp.tool()
-def create_map(width: int, height: int, discard_current: bool = False) -> dict:
-    """Create a new blank map of 1..100 tiles per side. Explicitly allow replacement of an open map."""
-    if not 1 <= width <= 100 or not 1 <= height <= 100:
-        raise BridgeError("width and height must be 1..100 tiles")
-    previous_instance = bridge.request("get_map_info")["bridge_instance"]
-    bridge.request("create_map", width=width, height=height, discard_current=discard_current)
-    return _wait_for_map(previous_instance=previous_instance, size=(width, height))
 
 
 @mcp.tool()

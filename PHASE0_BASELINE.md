@@ -6,7 +6,7 @@ Run on 2026-10-01 with the installed Dungeondraft 1.2.0.1, MCP bridge protocol 1
 
 The MCP discovered oak, grass, and dirt assets; filled the map with grass; painted a dirt terrain path down its center; placed ten oak objects; listed those ten IDs; captured a screenshot; and exported the full map at 40 PPI. [Open the exported preview](examples/phase0-sample.png). The final `get_status` reported `objects: 10` and zero drawn path elements. The dirt route is terrain paint, so it is not counted among drawn `Path` objects.
 
-Temporary benchmark props were deleted after each measurement. The live sample objects had IDs 260-269. These are session IDs, not stable semantic IDs. The Phase 0 bridge could not save through MCP. A later manual native save exposed a persistence defect: the saved map had zero objects although the live editor and PNG showed ten trees. Dungeondraft skips objects marked `preview` during save; the Phase 1 bridge clears that marker. A live retest is still required.
+Temporary benchmark props were deleted after each measurement. The live sample objects had IDs 260-269. These are session IDs, not stable semantic IDs. The Phase 0 bridge could not save through MCP. A later manual native save exposed a persistence defect: the saved map had zero objects although the live editor and PNG showed ten trees. Dungeondraft skips objects marked `preview` during save; the Phase 1 bridge clears that marker. A 2026-10-01 live retest saved and reopened ten trees with matching IDs and assets.
 
 | Temporary trees | Place time | Mean per `place_object` | Delete time |
 | ---: | ---: | ---: | ---: |
@@ -19,8 +19,8 @@ These are one-run measurements on this PC, not a performance guarantee. For comp
 ## Verification and limits
 
 - **Passed:** Bridge connection and protocol; map status; asset discovery; 10/50/200 object creation and cleanup counts; grass fill; terrain path; exact ten-tree object list; screenshot; 1400 x 800 PNG export.
-- **[RETEST] Native save/reopen:** Phase 1 adds lifecycle commands and clears Dungeondraft's `preview` marker on created objects. Run the Phase 1 integration test against the reloaded bridge; the earlier manual save did not retain trees.
-- **[RETEST] IDs and assets after reopen:** the live IDs and asset paths were verified before export; confirm native persistence and reopen with `phase1_smoke.py`.
+- **Passed native save/reopen:** the Phase 1 bridge cleared Dungeondraft's `preview` marker, saved ten trees in native JSON, and reopened the map through MCP.
+- **Passed IDs and assets after reopen:** IDs 0–9 and their oak asset paths matched before and after reopening in the live retest.
 - **Not covered:** wall, roof, portal, cave, undo, multi-level, large-map, and Foundry behavior. Do not infer those from this baseline.
 
 ## Review
@@ -30,4 +30,4 @@ These are one-run measurements on this PC, not a performance guarantee. For comp
 3. Read the tool/bridge behavior notes in [PROTOCOL.md](PROTOCOL.md) and the runtime scope in [API_COMPATIBILITY.md](API_COMPATIBILITY.md).
 4. To repeat the measurements, open a **disposable blank map** in Dungeondraft with the MCP mod enabled, then run `\.venv\Scripts\python.exe .\phase0_baseline.py --output-dir <output-directory>` from the repository root. The runner refuses a map with existing elements, cleans benchmark props, and leaves the final ten-tree sample open.
 
-Phase 1 implements create/open/save and the persistence correction. Its live save/reopen test will close these Phase 0 retests.
+Phase 1 implements open/save and the persistence correction. Its live save/reopen test closed the Phase 0 durability retests. New blank maps are created manually in Dungeondraft.

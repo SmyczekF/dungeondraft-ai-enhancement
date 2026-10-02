@@ -4,7 +4,10 @@ Reviewed against the installed `C:\Program Files\Dungeondraft\Dungeondraft.exe`
 (Windows file and product version `1.2.0.1`) and the published
 [Dungeondraft Modding API](https://megasploot.github.io/DungeondraftModdingAPI/).
 The mod manifest now requires `1.2.0.1`; `dd_version` is a minimum version in
-the mod format.
+the mod format. The documented modding API does not expose the running product
+version. An attempted `Global.BuildString` lookup returned null, so
+`get_capabilities` reports the Godot engine version and omits the unavailable
+Dungeondraft build rather than presenting `"Null"` as a version.
 
 | Bridge use | Published API | Status |
 | --- | --- | --- |
@@ -16,21 +19,21 @@ the mod format.
 
 The published reference describes the core API but does not establish that
 every behavior of the installed 1.2.0.1 build is unchanged. Phase 0 runtime
-checks verified the operations below. Phase 1 lifecycle, catalog, and geometry
-commands are implemented but still require a live reload and integration test.
+checks verified the operations below. Phase 1 live checks verified asset
+metadata, pagination, native save, reopening, and PNG export.
 See [PHASE0_BASELINE.md](PHASE0_BASELINE.md) for measurements and review steps.
 
 The [World reference](https://megasploot.github.io/DungeondraftModdingAPI/reference/World/)
 defines `CurrentLevelId` as a level ID. `list_levels` now finds its array index
 by matching each `Level.ID`, and reports both `current_index` and `current_id`.
 
-The Python MCP side uses MCP Python SDK v2 and exposes 46 tools in the Phase 1
+The Python MCP side uses MCP Python SDK v2 and exposes 45 tools in the Phase 1
 source. On the running
 Dungeondraft 1.2.0.1 instance, an MCP client completed `ping` (bridge protocol
 v16, Godot 3.4.2), `get_status`, `list_assets`, `place_object`, `delete_element`,
 `list_elements`, `fill_terrain`, `paint_path`, `screenshot`, and `export_map`.
 The grass/path/ten-tree sample exported as a 1400 x 800 PNG at 40 PPI. The
-bridge wire protocol remains v16; the SDK version is independent of the
+Phase 0 used wire protocol v16; Phase 1 uses v18. The SDK version is independent of the
 localhost TCP protocol.
 
 The live map contained exactly ten objects after the test, with IDs 260-269.
@@ -39,45 +42,75 @@ stayed at zero; that count refers to drawn `Path` elements. A native map file
 could not be saved or reopened through MCP during Phase 0. A manual native save
 was subsequently found to contain zero objects: Dungeondraft's object serializer
 skips nodes with its `preview` marker. The Phase 1 bridge clears that marker on
-created objects, paths, and lights, then verifies save/reopen by default. This
-fix is **pending a live durability retest**. The Phase 0 live editor content and
-PNG alone do not prove native persistence.
+created objects, paths, and lights, then verifies save/reopen by default. A
+2026-10-01 live retest saved ten oaks in native JSON, then reopened the map
+through MCP with the same ten IDs and asset paths. The exported PNG showed the
+center dirt path and five oaks on each side.
 
 ## Phase 1 API investigation
 
 The installed 1.2.0.1 assembly exposes `Master.CreateNewMap(int, int)`,
-`Master.Save(string, Action)`, and `Editor.ForceOpenMap(string)`. A disposable
-runtime probe confirmed those native methods can be called from a mod. The
-bridge now schedules create/open after acknowledging the socket request and
-releases its listener before Dungeondraft reloads the mod. The Python tool waits
-for a new bridge instance and checks the requested size or path. `save_map`
-checks native JSON, then reopens and compares element counts by default.
+`Master.Save(string, Action)`, and `Editor.ForceOpenMap(string)`. Their presence
+does not prove they are safe from every editor state. `Master.CreateNewMap` raised
+native editor exceptions when invoked from the active bridge, including a
+duplicate `DESIGN` toolbar error, and the new bridge instance never started.
+The `create_map` command was removed. The documented `Editor.ForceOpenMap`
+successfully reopened a saved sample; the bridge releases its listener before
+that scene reload. `save_map` checks native JSON, then reopens and compares
+element counts by default.
 
 The official [scripting lifecycle](https://megasploot.github.io/DungeondraftModdingAPI/Scripting/)
-loads tool mods only after a map finishes loading. **[PLAN CHANGED]** A user must
-open or create the first map after launching Dungeondraft; subsequent map
-creation and opening can use MCP once the bridge is active. This is an app
-startup constraint, not an unimplemented bridge command.
+loads tool mods only after a map finishes loading. **[PLAN CHANGED]** A user
+must create each new blank map in Dungeondraft. The bridge can reopen existing
+native maps through MCP. The public [Editor API](https://megasploot.github.io/DungeondraftModdingAPI/reference/Editor/)
+documents `ForceOpenMap`, but has no direct new-map method.
 
 ## Map reload and port ownership
 
-Godot error 22 is `ERR_ALREADY_IN_USE`. The 2026-10-01 port 8787 dialog after
-manual map creation showed a bind conflict. MCP-requested switches already stop
-the listener before scene reload; UI switches and Reload Mods do not pass
-through that path. A weak-reference listener handoff was attempted and later
-reverted when the bridge failed to listen. A Godot 3 parser then identified the
-actual startup defect: Phase 1 introduced reserved local names `master` and
-`tool`, which prevented the whole script from loading. They have been renamed
-and the script now parses. The handoff remains unverified. Bind failures are
-still logged without a modal dialog.
-Windows also recorded Dungeondraft 1.2.0.1 access-violation crashes during New
-Map attempts. Their exact native cause remains **[RETEST]** until the updated
-bridge is run through a manual New Map sequence.
+Godot error 22 is `ERR_ALREADY_IN_USE`. UI New Map reproduced the port conflict
+on 2026-10-02: the previous native TCP listener remained alive after Editor
+replacement. The final bridge stores the native TCP_Server instance ID on
+Godot's Engine singleton and stops that listener before binding a new one.
+Editor metadata did not survive replacement, and resolving managed mod-script
+instances produced Mono method-lookup errors. Two consecutive UI New Map
+switches now returned responsive protocol 18 bridges without bind conflicts.
+Reload Mods also passed. Unrelated processes owning port 8787 still cause a
+logged bind failure.
+
+Earlier loading failures included reserved locals `master` and `tool`, plus
+the invalid `TYPE_POOL_VECTOR2_ARRAY` global. They were fixed to `master_node`,
+`pattern_tool`, and `TYPE_VECTOR2_ARRAY`. The Godot 3 syntax gate does not check
+engine global constants, so live startup remains a separate acceptance check.
 
 Two later crashes after the listener change showed the same native fault
 offset (`0x13e07ca`). This does not support treating the port handoff as a
 crash fix. A subsequent manual New Map test succeeded with no mods and with
 only this mod enabled, but the bridge was not listening in the latter test.
-UI New Map does not call the bridge's MCP `create_map` command, so its native
-API path is not implicated by these manual failures. Recheck startup after
-the syntax correction, then test map creation through MCP separately.
+UI New Map does not call the bridge's former MCP `create_map` command, so the
+manual crash reports and the MCP map-switch failure are separate observations.
+The MCP path failed with native editor exceptions, while the bridge's ordinary
+commands, save, and open passed after the syntax corrections.
+
+The 2026-10-02 UI New Map test created the blank map but logged native
+`System.ArgumentOutOfRangeException` in `World.get_Level` / `Prop._ExitTree`
+while unloading the populated sample. The same action reproduced that error
+with all mods disabled. An intermittent `GDMonoInternals::tie_managed_to_unmanaged`
+fatal startup error also occurred with mods disabled; the next launch succeeded.
+These findings separate native runtime failures from the fixed bridge listener
+conflict; they do not establish the cause of every earlier access violation.
+Use a fresh editor session after native exceptions. Patching Dungeondraft's
+executable is outside this project's plan.
+
+## Phase 1 descriptor verification
+
+All eight descriptor kinds passed native save/reopen, exact ID/asset checks,
+pagination and individual lookup on protocol 18. Patterns must be enumerated
+with documented [GetShapes](https://megasploot.github.io/DungeondraftModdingAPI/reference/PatternShapes/),
+since collection children are layer containers. Their public `_Texture` getter
+in the installed assembly holds the shader-backed asset; Polygon2D.texture
+does not. The [SelectTool enum](https://megasploot.github.io/DungeondraftModdingAPI/reference/SelectTool/)
+uses 2 for free portals and 3 for mounted portals. Free-door sprite rectangles
+are transformed into world space. Light bounds use Godot 3's
+[Light2D offset and texture_scale](https://docs.godotengine.org/en/3.4/classes/class_light2d.html).
+The expanded `phase1_smoke.py` covers two pattern shapes in one layer and both
+door kinds to catch collection/count and classification regressions.

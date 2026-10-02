@@ -26,9 +26,9 @@ forwards calls as JSON. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
 
 > **Compatibility:** This version targets the installed Windows build,
 > **Dungeondraft 1.2.0.1**. Documented API calls were checked against the
-> published modding reference and a live 1.2.0.1 session. The Phase 1 additions
-> require a final live reload and durability check. See [API_COMPATIBILITY.md](API_COMPATIBILITY.md).
-> It exposes 46 tools across lifecycle, inspection, creation, terrain, editing, levels,
+> published modding reference and a live 1.2.0.1 session. See
+> [API_COMPATIBILITY.md](API_COMPATIBILITY.md). It exposes 45 tools across
+> lifecycle, inspection, creation, terrain, editing, levels,
 > selection, capture, camera, and undo.
 
 Phase 1's live acceptance procedure and current verification status are in
@@ -39,10 +39,15 @@ Phase 1's live acceptance procedure and current verification status are in
 - **Inspect:** `get_status`, `list_levels`, `list_elements`, `get_element`,
   `get_map_info`, `get_capabilities`, `list_asset_categories`, `list_assets`,
   `list_asset_metadata` (paged paths, dimensions and filename tags).
-- **Map files:** `create_map`, `open_map`, `save_map` manage native editable maps.
+- **Map files:** `open_map` and `save_map` manage native editable maps.
   `save_map` checks the file and, by default, reopens it to verify element counts.
-  Dungeondraft loads mod scripts only after a map opens, so open or create the
-  first map manually after launching the app. Further map switches can use MCP.
+  Create a new blank map in Dungeondraft before the MCP edits it. The installed
+  editor's internal new-map call raised native exceptions when invoked by the
+  bridge, so the unsafe `create_map` command was removed. Saved maps can be
+  reopened through MCP.
+  On 1.2.0.1, UI New Map can log native object-cleanup exceptions even with
+  all mods disabled; restart the editor before creating the next blank map
+  if this happens. The bridge's separate port-conflict issue is fixed.
 - **Create:** `place_object`, `draw_wall`, `draw_path`, `add_light`,
   `add_portal`, `add_roof`, `add_text`, `place_pattern` (tiled floor shapes —
   wood planks, tile, brick — rendered below objects), `build_room` (a wall loop
@@ -89,7 +94,7 @@ PowerShell on Windows.
 On load you should see in the Dungeondraft log:
 
 ```
-[mcp-bridge] listening on 127.0.0.1:8787 (protocol v17)
+[mcp-bridge] listening on 127.0.0.1:8787 (protocol v18)
 ```
 
 ### 2. Install the MCP server
@@ -117,6 +122,17 @@ it on a disposable map: a failed test may leave objects behind.
 
 If it cannot connect, confirm the mod is enabled, a map is open, and the log
 shows the `listening` line. Port 8787 must be available on loopback.
+
+For the Phase 1 acceptance check, create a blank disposable map at least
+20 x 16 tiles and run:
+
+```powershell
+.\.venv\Scripts\python.exe .\phase1_smoke.py --output-dir <new-empty-directory>
+```
+
+It saves a ten-tree path sample, exports PNG, verifies every element descriptor
+kind in a separate mixed map, and restores the sample. Review `report.json`,
+`sample.png`, and both native map files in that output directory.
 
 To *see* something get built (a small furnished room left on the map, rather
 than a self-cleaning test), run

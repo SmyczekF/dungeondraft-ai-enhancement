@@ -17,18 +17,18 @@ The source of truth is the specification plus its seed and asset selections. Kee
 
 ## What the MCP can do today
 
-The Python MCP server exposes **46 tools** in the Phase 1 source. They operate after Dungeondraft has loaded a map and started its mod scripts. Phase 1 additions await a live reload and durability check:
+The Python MCP server exposes **45 tools** in the Phase 1 source. They operate after Dungeondraft has loaded a map and started its mod scripts:
 
 | Area | Existing tools |
 | --- | --- |
 | Connection and discovery | `ping`, `get_status`, `get_map_info`, `get_capabilities`, `list_asset_categories`, `list_assets`, `list_asset_metadata`, `refresh_asset_catalog`, `list_elements`, `get_element`, `list_levels` |
-| Native maps | `create_map`, `open_map`, `save_map` |
+| Native maps | `open_map`, `save_map` |
 | Map elements | `place_object`, `draw_wall`, `draw_path`, `add_light`, `add_portal`, `add_roof`, `place_pattern`, `build_room`, `add_text` |
 | Terrain and caves | `set_terrain_slot`, `fill_terrain`, `fill_region`, `paint_terrain`, `paint_path`, `dig_cave`, `clear_caves` |
 | Changes and levels | `move_element`, `modify_object`, `duplicate_object`, `delete_element`, `add_level`, `set_level`, `select_elements`, `clear_selection`, `undo`, `redo` |
 | View and output | `get_camera`, `set_camera`, `focus_element`, `fit_elements`, `screenshot`, `export_map` |
 
-These tools cover tree placement and discovery, terrain paths, walls, rooms, previews, native map lifecycle, paged inspection, and basic asset metadata. The lifecycle and persistence changes are pending live verification. A scripted client can call low-level tools repeatedly, but the model still has to coordinate each call; native batching remains Phase 2. Asset tags are inferred from filenames, not curated suitability data. Element bounds are visual geometry, not collision semantics. The bridge's undo stack is independent of Dungeondraft's UI history and does not cover every command. See [PROTOCOL.md](PROTOCOL.md) for exact behavior.
+These tools cover tree placement and discovery, terrain paths, walls, rooms, previews, native map save/reopen, paged inspection, and basic asset metadata. A scripted client can call low-level tools repeatedly, but the model still has to coordinate each call; native batching remains Phase 2. Asset tags are inferred from filenames, not curated suitability data. Element bounds are visual geometry, not collision semantics. The bridge's undo stack is independent of Dungeondraft's UI history and does not cover every command. See [PROTOCOL.md](PROTOCOL.md) for exact behavior.
 
 ## Design rules
 
@@ -42,23 +42,27 @@ These tools cover tree placement and discovery, terrain paths, walls, rooms, pre
 ## Phase 0 — Establish a live baseline
 
 - [x] Run a live smoke test on Dungeondraft 1.2.0.1 for asset discovery, terrain fill, terrain path, object placement, screenshot, and PNG export. See [PHASE0_BASELINE.md](PHASE0_BASELINE.md).
-- [RETEST] Save/reopen the native sample through MCP after reloading the Phase 1 bridge. Phase 0's manually saved file omitted bridge-created objects because they retained Dungeondraft's `preview` marker; Phase 1 clears it.
+- [x] Save/reopen the native sample through MCP after reloading the Phase 1 bridge. The 2026-10-01 live retest retained exactly ten trees in the native JSON and after MCP reopen; Phase 1 clears their `preview` marker.
 - [x] Measure 10, 50, and 200 object placements with one persistent MCP session, and compare with separate MCP sessions. This establishes the current per-object cost; repeat after Phase 2 batch support is implemented.
-- [RETEST] Confirm asset paths and object IDs after save/reopen with the Phase 1 integration runner. The live map's ten objects and IDs were verified before export only.
+- [x] Confirm asset paths and object IDs after save/reopen. IDs 0–9 and their oak asset paths matched before and after the live reopen.
 - [x] Update [API_COMPATIBILITY.md](API_COMPATIBILITY.md) with runtime findings.
 
-**Exit:** A repeatable sample containing grass, a center dirt path, and exactly ten trees can be produced, saved, reopened, and counted without Computer Use. Production and live count passed; durability is **[RETEST]** under Phase 1. Phase 0 was reviewed before Phase 1 began.
+**Exit:** A repeatable sample containing grass, a center dirt path, and exactly ten trees was produced, saved, reopened, and counted without Computer Use. The native file contained ten objects and the PNG showed the intended layout. Phase 0 was reviewed before Phase 1 began.
 
 ## Phase 1 — Complete the editor lifecycle and inspection API
 
-- [x] Implement `create_map`, `open_map`, `save_map`, and `get_map_info`; inspect installed 1.2.0.1 API signatures and probe the native calls. Live end-to-end verification is pending.
-- [x] Make save destinations and overwrite explicit; wait for a complete native JSON file and reopen to compare element counts by default. **[RETEST]** Verify objects and assets survive the round trip.
-- [x] Implement paginated `list_elements` and descriptors with geometry, bounds, layer, and asset where exposed. **[RETEST]** Exercise each element type in a live session.
+- [x] Implement `open_map`, `save_map`, and `get_map_info`; verify the installed 1.2.0.1 editor can save and reopen a map through MCP.
+- [REJECTED] `create_map` through the in-editor bridge. The internal `Master.CreateNewMap` call raised editor exceptions (`SelectTool.EnableTransformBox`, `Objects.RemoveFromSearchTable`, duplicate `DESIGN` toolbar) and left the bridge disconnected. The published modding API has no supported new-map method. The unsafe command was removed; native-file generation and UI simulation are not planned.
+- [x] Make save destinations and overwrite explicit; wait for a complete native JSON file and reopen to compare element counts by default. The live native file retained ten trees, and MCP reopen preserved their IDs and assets.
+- [x] Implement paginated `list_elements` and descriptors with geometry, bounds, layer, and asset where exposed. All eight kinds passed live save/reopen, ID/asset checks, pagination and individual lookup. Pattern shapes are counted independently of layers; free and mounted portals are distinguished; free portal and light bounds use world coordinates.
+- [x] Verify UI New Map and Reload Mods keep the bridge reachable. Fixed the reproducible port 8787 conflict by retiring the previous native listener using an Engine-owned instance ID. Two consecutive UI New Map switches and Reload Mods passed.
 - [x] Add a cached asset catalog with path, category, texture dimensions, nominal object footprint, and filename-derived tags. Refresh it after asset-pack changes. Curated semantic suitability belongs to Phase 3 asset selection rules.
-- [x] Add `get_capabilities` with protocol, installed build, commands, active mods, and catalog version. **[RETEST]** Confirm these fields after reload.
-- [PLAN CHANGED] The first map after launching Dungeondraft must be opened or created manually: the official [scripting lifecycle](https://megasploot.github.io/DungeondraftModdingAPI/Scripting/) starts tool mods only after a map loads. Once the bridge is running, it can create/open subsequent maps through MCP. No custom launcher or UI workaround is planned.
+- [x] Add `get_capabilities` with protocol, Godot engine version, commands, active mods, and catalog version. Live asset lookup and metadata passed; the capability set is checked by the Phase 1 runner. The installed Dungeondraft product version is not exposed by the documented modding API; the manifest states the minimum supported version.
+- [PLAN CHANGED] Create each new blank map manually in Dungeondraft. The official [scripting lifecycle](https://megasploot.github.io/DungeondraftModdingAPI/Scripting/) starts tool mods only after a map loads, and the tested internal new-map call is unsafe from an active mod. The bridge can reopen saved maps through MCP. No custom launcher, generated native file, or UI workaround is planned.
 
-**Exit:** After one manual initial map load per Dungeondraft session, a client can create/open subsequent maps, discover assets, inspect content, edit, save a native file, and reopen it through MCP. The exit remains pending the live `phase1_smoke.py` test and Phase 0 durability retest.
+**Exit achieved (2026-10-02):** After a manual blank-map load, a client can discover assets, inspect content, edit, save a native file, and reopen it through MCP. Protocol 18 passed the expanded `phase1_smoke.py` check: ten-tree path sample, PNG export, mixed scene with every descriptor kind and two separate floor shapes, native durability, pagination, and exact IDs/assets. A fresh MCP stdio client exposed 45 tools and completed live queries. See [PHASE1_REVIEW.md](PHASE1_REVIEW.md) for proof and review steps.
+
+**Editor limitation:** UI New Map from the populated sample also logged native `Prop._ExitTree` / `World.get_Level` exceptions with every mod disabled. An intermittent Mono startup fatal error occurred with mods disabled too. These remain Dungeondraft runtime issues; this project will not patch its executable. Start a fresh editor session for new blank maps after native exceptions. MCP `open_map` and `save_map` passed the automated workflow.
 
 ## Phase 2 — Batch edits in the GDScript bridge
 
@@ -105,4 +109,4 @@ These tools cover tree placement and discovery, terrain paths, walls, rooms, pre
 
 ## First implementation slice
 
-The immediate proof is **MCP creation of the ten-tree path sample after the initial map is loaded**. Phase 1 provides create/save and inspection; Phase 2 adds bounded native batching. The `phase1_smoke.py` runner verifies native save/reopen, exact tree IDs/assets, pagination, and PNG export before Phase 1 is accepted.
+The immediate proof is **MCP generation of the ten-tree path sample on a manually created blank map**. Phase 1 provides save/reopen and inspection; Phase 2 adds bounded native batching. The `phase1_smoke.py` runner verifies native save/reopen, exact tree IDs/assets, pagination, and PNG export before Phase 1 is accepted.

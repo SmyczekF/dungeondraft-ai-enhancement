@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Per-command validator for the Dungeondraft bridge — no MCP involved.
 
-Run with Dungeondraft open (mod enabled, a map loaded). It exercises every
-bridge command and prints PASS/FAIL per command, so you can see exactly what
+Run with Dungeondraft open (mod enabled, a disposable map loaded). It exercises
+basic element edits and prints PASS/FAIL per command, so you can see what
 works on your Dungeondraft version. It builds a small throwaway scene near the
 map center (a room of walls, an object, a light, a path) and then deletes what
 it created.
@@ -37,6 +37,17 @@ def first_asset(category, search=""):
     res = bridge.request("list_assets", category=category, search=search, limit=1)
     assets = res.get("assets") or []
     return assets[0] if assets else None
+
+
+def object_ids():
+    ids = set()
+    offset = 0
+    while True:
+        page = bridge.request("list_elements", kind="objects", offset=offset, limit=500)
+        ids.update(el["id"] for el in page["elements"])
+        offset += page["count"]
+        if offset >= page["total"]:
+            return ids
 
 
 def main() -> int:
@@ -97,17 +108,19 @@ def main() -> int:
 
     # --- undo / redo round trip: place an object, undo it, redo it ---
     def undo_round_trip():
+        existing_ids = object_ids()
         before = bridge.request("get_status")["counts"]["objects"]
         made = bridge.request("place_object", asset=obj_asset, x=cx - 200, y=cy)
+        created_ids.append(made["id"])
         after_create = bridge.request("get_status")["counts"]["objects"]
         bridge.request("undo")
         after_undo = bridge.request("get_status")["counts"]["objects"]
         bridge.request("redo")
         after_redo = bridge.request("get_status")["counts"]["objects"]
-        # track whatever exists now so cleanup removes it
-        for el in bridge.request("list_elements", kind="objects")["elements"]:
-            if el["id"] not in created_ids:
-                created_ids.append(el["id"])
+        # Redo can allocate a new ID; never add preexisting map objects to cleanup.
+        for ident in object_ids() - existing_ids:
+            if ident not in created_ids:
+                created_ids.append(ident)
         if not (after_create == before + 1 and after_undo == before and after_redo == before + 1):
             raise BridgeError(f"counts before={before} create={after_create} undo={after_undo} redo={after_redo}")
         return f"object count {before}->{after_create} undo->{after_undo} redo->{after_redo}"

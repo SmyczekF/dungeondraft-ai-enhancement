@@ -40,8 +40,9 @@ Error:
 Coordinates are **woxel** (world pixel) space; map center is in
 `get_status -> map_center`. Every element is referenced by integer `id`
 (== Dungeondraft `node_id`); create commands return it, query commands list it.
-Protocol version 17 adds native map lifecycle and paged inspection. Dungeondraft
-loads mod scripts after the first map opens, so the title screen has no bridge.
+Protocol version 18 removes the unsafe new-map command and retains native
+save/open and paged inspection. Dungeondraft
+loads mod scripts after a map opens, so the title screen has no bridge.
 
 ### Read / query
 
@@ -50,7 +51,7 @@ loads mod scripts after the first map opens, so the title screen has no bridge.
 | `ping` | — | `{ pong, protocol, bridge_instance, engine }` |
 | `get_status` | — | `{ map_open, level_id, level_count, map_size_woxels, map_center, counts{}, active_tool }` |
 | `get_map_info` | — | `{ map_open, path, size_tiles?, size_woxels?, level_id?, level_count?, dirty, editor_dirty, bridge_dirty, saving, loading, bridge_instance }` |
-| `get_capabilities` | — | `{ protocol, bridge_instance, dungeondraft_version, engine, commands[], asset_catalog_version, asset_counts{}, active_mods[] }` |
+| `get_capabilities` | — | `{ protocol, bridge_instance, engine, commands[], asset_catalog_version, asset_counts{}, active_mods[] }` |
 | `list_asset_categories` | — | `{ categories[] }` |
 | `list_assets` | `category="Objects"`, `search=""`, `offset=0`, `limit=100` | `{ category, catalog_version, total, matched, offset, limit, returned, assets[] }` |
 | `list_asset_metadata` | `category="Objects"`, `search=""`, `offset=0`, `limit=100` | Same pagination; asset entries include `path`, `category`, `tags[]`, `texture_pixels?`, `nominal_footprint_woxels?` |
@@ -72,8 +73,10 @@ The asset catalog caches sorted paths per category. Reloading the mod resets it;
 version hashes paths and active mod IDs, so clients can invalidate selections.
 
 `portals` includes **wall-mounted** portals (doors/windows), which live inside
-each wall's `Portals` array rather than `level.Portals` — `list_elements` walks
-the walls to surface them. A wall portal describes as `{ id, kind:"wall_portal",
+each wall's `Portals` array rather than `level.Portals` — both status counts
+and `list_elements` include them. Freestanding portals have `kind:"portal"`.
+Patterns enumerate `PatternShapes.GetShapes()`, not its layer containers.
+A wall portal describes as `{ id, kind:"wall_portal",
 wall_id, position[x,y], normal[x,y], facing(deg), radius, closed, asset? }`
 where `position` is the door's gap center and `normal` is the outward unit
 vector (perpendicular to the wall, pointing out of the room). To route a road to
@@ -89,22 +92,28 @@ node; default color is black.
 
 | cmd | params | result |
 | --- | --- | --- |
-| `create_map` | `width`, `height` in tiles (1–100), `discard_current=false` | `{ accepted, width, height }` |
 | `open_map` | absolute existing `.dungeondraft_map` `path`, `discard_current=false` | `{ requested_path }` |
 | `save_map` | absolute `.dungeondraft_map` `path?`, `overwrite=false` | `{ requested_path }` |
 
-Creating and opening reload the editor scene. For MCP-requested switches, the
-bridge releases its TCP listener after acknowledging the request. For switches
-started in Dungeondraft's UI or by Reload Mods, the script attempts a fresh
-bind. A bind failure is logged without a modal alert; the bridge will be
-unavailable until the mod starts again with port 8787 free. A prior listener
-handoff attempt was reverted after the live bridge stopped starting. The Python
-MCP tools
-wait for a new `bridge_instance` and verify path or dimensions. The Python
+Create new blank maps in Dungeondraft. The internal `Master.CreateNewMap` call
+raised editor exceptions when invoked by the mod and is not exposed. Opening a
+saved map reloads the editor scene. For MCP-requested switches, the
+bridge releases its TCP listener after acknowledging the request. On startup,
+the new bridge retires any previous native listener using its Godot instance ID
+stored on the Engine singleton. This survives Editor replacement and prevents
+UI New Map from colliding with the previous bridge on port 8787. Reload Mods
+also passed live testing. A bind failure caused by another process is logged
+without a modal alert. The Python
+`open_map` tool waits for a new `bridge_instance` and verifies the path. The Python
 `save_map` waits for parseable native JSON and, by default, reopens the
 map and compares per-kind element counts. Reopen clears bridge undo history.
 Use `discard_current=true` only after saving any work to retain. `dirty`
 combines Dungeondraft's editor flag with edits tracked by the bridge.
+
+Dungeondraft 1.2.0.1 logged native `Prop._ExitTree` / `World.get_Level` exceptions
+when UI New Map replaced the populated sample, including with all mods disabled.
+The new blank map appeared, but a fresh editor session is recommended after
+native exceptions. This is separate from the fixed bridge listener conflict.
 
 ### Create (each returns `{ id, ... }`)
 

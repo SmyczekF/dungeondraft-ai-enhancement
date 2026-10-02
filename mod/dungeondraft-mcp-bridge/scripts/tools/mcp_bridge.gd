@@ -21,7 +21,8 @@ var script_class = "tool"
 
 const HOST := "127.0.0.1"
 const PORT := 8787
-const PROTOCOL_VERSION := 17
+const PROTOCOL_VERSION := 18
+const LISTENER_KEY := "dungeondraft_mcp.bridge_listener"
 
 # Commands that get wrapped in a Dungeondraft undo record (see _record_and_dispatch).
 const CREATE_CMDS := [
@@ -38,7 +39,7 @@ const DEFAULT_PATTERN_TINT := Color(0.62, 0.5, 0.34)
 
 # SelectTool.GetSelectableType() integer -> readable kind.
 const KIND_NAMES := {
-	1: "wall", 2: "wall_portal", 3: "portal", 4: "object",
+	1: "wall", 2: "portal", 3: "wall_portal", 4: "object",
 	5: "path", 6: "light", 7: "pattern", 8: "roof",
 }
 # kind string -> the Level child collection that holds those nodes.
@@ -66,17 +67,36 @@ var _catalog_version := ""
 func start():
 	_instance_id = str(OS.get_ticks_msec()) + "-" + str(randi())
 	_register_tool()
+	# Dungeondraft has no tool-mod stop callback and can retain the previous
+	# script during UI map switches. Explicitly retire its transport before bind.
+	# Store the native TCP_Server ID, not a mod-script object: this Mono build
+	# cannot safely marshal a previous GDScript tool instance back from metadata.
+	# Engine survives map/editor replacement; Editor metadata does not.
+	if Engine.has_meta(LISTENER_KEY):
+		var previous_server = instance_from_id(int(Engine.get_meta(LISTENER_KEY)))
+		if previous_server is TCP_Server:
+			previous_server.stop()
 	_server = TCP_Server.new()
 	var err = _server.listen(PORT, HOST)
 	if err == OK:
+		Engine.set_meta(LISTENER_KEY, _server.get_instance_id())
 		print("[mcp-bridge] listening on %s:%d (protocol v%d)" % [HOST, PORT, PROTOCOL_VERSION])
 	else:
 		_server = null
 		print("[mcp-bridge] FAILED to listen on %s:%d (error %d); bridge unavailable" % [HOST, PORT, err])
 
 
+func _stop_listener():
+	if _server != null:
+		_server.stop()
+	_server = null
+	for connection in _conns:
+		connection["peer"].disconnect_from_host()
+	_conns = []
+
+
 func update(delta : float):
-	if _server == null:
+	if _server == null or not _server.is_listening():
 		return
 
 	while _server.is_connection_available():
@@ -106,19 +126,14 @@ func update(delta : float):
 	if not _pending_switch.empty():
 		# A map change reloads the mod. Release the listener before the new copy
 		# starts, after the current request has received its acknowledgement.
-		_server.stop()
-		_server = null
+		_stop_listener()
 		call_deferred("_run_pending_switch")
 
 
 func _run_pending_switch():
 	var action = _pending_switch
 	_pending_switch = {}
-	if action["kind"] == "open":
-		Global.Editor.call("ForceOpenMap", action["path"])
-	else:
-		Global.Editor.set("CurrentMapFile", "")
-		_master().call("CreateNewMap", action["width"], action["height"])
+	Global.Editor.call("ForceOpenMap", action["path"])
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +337,6 @@ func _safe_dispatch(req : Dictionary) -> Dictionary:
 		"get_capabilities": return _get_capabilities()
 		"refresh_asset_catalog": return _refresh_asset_catalog()
 		"list_asset_metadata": return _list_asset_metadata(req)
-		"create_map": return _create_map(req)
 		"open_map": return _open_map(req)
 		"save_map": return _save_map(req)
 		"list_asset_categories": return _ok({ "categories": ASSET_CATEGORIES })
@@ -381,7 +395,7 @@ const ASSET_CATEGORIES := [
 const SUPPORTED_COMMANDS := [
 	"ping", "get_status", "get_map_info", "get_capabilities", "refresh_asset_catalog",
 	"list_asset_categories", "list_assets", "list_asset_metadata", "list_elements", "get_element", "list_levels",
-	"create_map", "open_map", "save_map", "place_object", "draw_wall", "draw_path", "add_light",
+	"open_map", "save_map", "place_object", "draw_wall", "draw_path", "add_light",
 	"add_portal", "add_roof", "add_text", "place_pattern", "build_room", "set_terrain_slot",
 	"fill_terrain", "fill_region", "paint_terrain", "paint_path", "dig_cave", "clear_caves",
 	"move_element", "modify_object", "duplicate_object", "delete_element", "add_level", "set_level",
@@ -434,7 +448,7 @@ func _get_capabilities() -> Dictionary:
 	for category in ASSET_CATEGORIES:
 		counts[category] = _asset_catalog[category].size()
 	return _ok({"protocol": PROTOCOL_VERSION, "bridge_instance": _instance_id,
-		"dungeondraft_version": str(Global.BuildString), "engine": Engine.get_version_info(),
+		"engine": Engine.get_version_info(),
 		"commands": SUPPORTED_COMMANDS, "asset_catalog_version": _catalog_version,
 		"asset_counts": counts, "active_mods": Script.GetActiveMods()})
 
@@ -485,7 +499,8 @@ func _list_asset_metadata(req : Dictionary) -> Dictionary:
 
 func _get_map_info() -> Dictionary:
 	var level = Global.World.GetCurrentLevel()
-	var path = str(Global.Editor.get("CurrentMapFile"))
+	var current_file = Global.Editor.get("CurrentMapFile")
+	var path = "" if current_file == null else str(current_file)
 	var master_node = _master()
 	var info := {"map_open": level != null, "path": path, "bridge_instance": _instance_id, "dirty": bool(master_node.get("IsModified")) or _bridge_dirty, "editor_dirty": bool(master_node.get("IsModified")), "bridge_dirty": _bridge_dirty, "saving": bool(master_node.get("IsSaving")), "loading": bool(master_node.get("IsLoadingMap"))}
 	if level != null:
@@ -494,22 +509,6 @@ func _get_map_info() -> Dictionary:
 		info["level_id"] = Global.World.CurrentLevelId
 		info["level_count"] = Global.World.levels.size()
 	return _ok(info)
-
-
-func _create_map(req : Dictionary) -> Dictionary:
-	var width = int(req.get("width", 0))
-	var height = int(req.get("height", 0))
-	if width < 1 or height < 1 or width > 100 or height > 100:
-		return _err("width and height must be 1..100 tiles")
-	if Global.World.GetCurrentLevel() != null and not bool(req.get("discard_current", false)):
-		return _err("a map is open; set discard_current=true to replace it")
-	var master_node = _master()
-	if bool(master_node.get("IsSaving")) or bool(master_node.get("IsLoadingMap")):
-		return _err("editor is busy saving or loading")
-	_pending_switch = {"kind": "create", "width": width, "height": height}
-	_undo_stack = []
-	_redo_stack = []
-	return _ok({"accepted": true, "width": width, "height": height})
 
 
 func _open_map(req : Dictionary) -> Dictionary:
@@ -557,7 +556,7 @@ func _get_status() -> Dictionary:
 		return _ok({ "map_open": false })
 	var counts := {}
 	for kind in COLLECTIONS:
-		counts[kind] = _collection(level, kind).get_child_count()
+		counts[kind] = _elements(level, kind).size()
 	return _ok({
 		"map_open": true,
 		"level_id": Global.World.CurrentLevelId,
@@ -743,19 +742,7 @@ func _list_elements(req : Dictionary) -> Dictionary:
 		return _err("limit must be 1..500 and offset must be nonnegative")
 	var out := []
 	var total := 0
-	# Wall-mounted portals (doors/windows) live inside each wall's `Portals`
-	# array, NOT in level.Portals — so listing "portals" must also walk the
-	# walls, or hand-placed doors are invisible to query.
-	if kind == "portals":
-		for wall in level.Walls.get_children():
-			var wp = wall.get("Portals")
-			if wp == null:
-				continue
-			for portal in wp:
-				if total >= offset and out.size() < limit:
-					out.append(_describe_wall_portal(portal, wall))
-				total += 1
-	for node in _collection(level, kind).get_children():
+	for node in _elements(level, kind):
 		if total >= offset and out.size() < limit:
 			out.append(_describe(node))
 		total += 1
@@ -1750,6 +1737,14 @@ func _element_position(node):
 func _element_rect(node):
 	if _is_text(node):
 		return node.get_global_rect()  # Control: world-space rect
+	# Portal.Rect is local to its sprite; transform its visual rect to world space.
+	if node.get("IsFreestanding") != null:
+		var portal_sprite = node.get("Sprite")
+		if portal_sprite != null and portal_sprite.has_method("get_rect"):
+			return portal_sprite.get_global_transform().xform(portal_sprite.get_rect())
+	if node is Light2D and node.texture != null:
+		var light_size = node.texture.get_size() * node.texture_scale
+		return node.get_global_transform().xform(Rect2(node.offset - light_size * 0.5, light_size))
 	var grect = node.get("GlobalRect")
 	if grect != null and grect is Rect2 and grect.size.length() > 0.0:
 		return grect
@@ -1803,8 +1798,21 @@ func _clear_selection() -> Dictionary:
 # Helpers
 # ---------------------------------------------------------------------------
 
-func _collection(level, kind : String) -> Node:
-	return level.get(COLLECTIONS[kind])
+func _elements(level, kind : String) -> Array:
+	# PatternShapes children are layer containers, not selectable shapes.
+	if kind == "patterns":
+		return level.PatternShapes.GetShapes()
+	var nodes := []
+	# Mounted portals live under walls; free portals live in level.Portals.
+	if kind == "portals":
+		for wall in level.Walls.get_children():
+			var portals = wall.get("Portals")
+			if portals != null:
+				for portal in portals:
+					nodes.append(portal)
+	for node in level.get(COLLECTIONS[kind]).get_children():
+		nodes.append(node)
+	return nodes
 
 
 # Stable id for a node: reuse its node_id meta, else allocate+register one.
@@ -1833,12 +1841,12 @@ func _is_text(node) -> bool:
 
 
 func _describe(node) -> Dictionary:
-	# A wall-mounted portal carries a WallID script var and lives under its wall;
-	# describe it richly (position + outward normal) like list_elements does.
-	if node.get("WallID") != null and node.get("Direction") != null:
-		var parent = node.get_parent()
-		if parent != null:
-			return _describe_wall_portal(node, parent)
+	# Both portal types carry WallID. Only mounted portals reference a wall.
+	var wall_id = node.get("WallID")
+	if wall_id != null and int(wall_id) >= 0 and not bool(node.get("IsFreestanding")):
+		var wall = Global.World.GetNodeByID(int(wall_id))
+		if wall != null:
+			return _describe_wall_portal(node, wall)
 	if _is_text(node):
 		# DD Text extends LineEdit (Control): position is rect_position, the
 		# string is the inherited `.text`, and size/color are the `fontSize` /
@@ -1905,7 +1913,9 @@ func _texture_path(node, kind : int) -> String:
 	elif kind == 8:
 		tex = node.get("TilesTexture")
 	elif kind == 7:
-		tex = node.get("texture")
+		# PatternShape uses its public shader texture property, not
+		# Polygon2D.texture (confirmed in the installed 1.2.0.1 assembly).
+		tex = node.get("_Texture")
 	if tex != null and tex is Texture:
 		return tex.resource_path
 	return ""
