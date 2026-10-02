@@ -154,3 +154,16 @@ Automatic reopening was also removed because the native save status schedules
 a delayed widget callback. The focused regression and save contract changes
 are described in PHASE1_REVIEW.md. The temporary creation prototype is not a
 published MCP tool and requires the user's manual fresh session before testing.
+
+## Verified save checkpoint (2026-10-02)
+
+Protocol 19 / package 0.2.3 keeps 45 MCP tools. The native save request captures
+the current bridge undo-branch identity and non-recorded edit revision. After
+native JSON validation, the Python client confirms that save token. Undo/redo
+can return to the saved state without clearing history; later edits remain
+dirty, and non-recorded deletion cannot be erased by undoing a different edit.
+Stale confirmations fail. Manual UI saves are not checkpoint confirmation.
+`save_checkpoint_regression.py` passed all live transitions and scene preservation;
+a fresh MCP client saved successfully. DungeondraftConsole showed the protocol
+19 listener with no script/runtime errors after testing. The test left a saved
+empty disposable map. Native editor dirty state remains independently reported.

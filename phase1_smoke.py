@@ -105,8 +105,8 @@ def run(output_dir: Path) -> dict:
     bridge.request("ping")
     status = bridge.request("get_status")
     capabilities = get_capabilities()
-    if capabilities["protocol"] != 18:
-        raise RuntimeError(f"reload the forked mod; expected protocol 18, got {capabilities['protocol']}")
+    if capabilities["protocol"] != 19:
+        raise RuntimeError(f"reload the forked mod; expected protocol 19, got {capabilities['protocol']}")
     required = {"open_map", "save_map", "list_asset_metadata", "get_capabilities"}
     if not required.issubset(capabilities["commands"]):
         raise RuntimeError("bridge is missing Phase 1 commands")

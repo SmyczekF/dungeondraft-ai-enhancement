@@ -12,8 +12,12 @@ switches passed, but populated native replacement raised cleanup/disposed-object
 exceptions. It is removed. A Windows launcher opens prepared native templates;
 see [CREATION_REVIEW.md](CREATION_REVIEW.md). Native startup failures remain
 intermittent and have not been attributed to a root cause.
-`bridge_dirty` can remain true after a verified save and needs a save-checkpoint
-fix; do not use it alone as proof that changes are unsaved.
+The save-checkpoint fix is now accepted on protocol 19 / package 0.2.3, with
+45 MCP tools. Live regression covered save/undo/redo, non-recorded deletion,
+edits after a save request and stale tokens; a fresh MCP client save passed.
+The DungeondraftConsole screen was reviewed and showed no native errors.
+Artifacts: `C:/Users/smycz/Documents/ChatGPT/Dungeondraft/save-checkpoint-2026-10-02/`.
+Earlier entries below retain the historical protocol/version and findings.
 
 Latest review artifacts:
 `C:\Users\smycz\Documents\ChatGPT\Dungeondraft\history-regression-native-save-signal-2026-10-02`.

@@ -16,7 +16,7 @@ The tools talk to a live Dungeondraft, not this repo. They only work when:
    also created manually; the bridge can reopen saved maps.
 
 If both aren't true, calls fail (connection refused, or `"no map open"`).
-**Verify first:** call `ping` (expect `pong` + protocol version 18), then
+**Verify first:** call `ping` (expect `pong` + protocol version 19), then
 `get_status` (expect `map_open: true` and a `map_center`). If `ping` fails, the
 mod isn't loaded or DD isn't running — ask the user to start it; don't retry
 blindly.
@@ -36,8 +36,9 @@ blindly.
   first if needed. `save_map` validates the written native JSON and preserves
   bridge undo history. Reopen separately after the save notification disappears;
   immediate reopening can leave native save UI callbacks pointing at freed widgets.
-  `bridge_dirty` currently stays true until reload even after verified saving;
-  do not treat it alone as proof of unsaved work. A checkpoint fix is pending.
+  `bridge_dirty` compares bridge edit state with the last verified MCP save.
+  Undo/redo preserves the save checkpoint; non-recorded edits stay conservatively
+  dirty until saved. UI saving alone does not confirm a bridge checkpoint.
   Do not call Dungeondraft's internal
   `Master.CreateNewMap` from the mod; it failed during a live map switch.
 - The bridge retires a previous native listener using an instance ID stored

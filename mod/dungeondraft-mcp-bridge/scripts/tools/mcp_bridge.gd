@@ -21,7 +21,7 @@ var script_class = "tool"
 
 const HOST := "127.0.0.1"
 const PORT := 8787
-const PROTOCOL_VERSION := 18
+const PROTOCOL_VERSION := 19
 const LISTENER_KEY := "dungeondraft_mcp.bridge_listener"
 
 # Commands that get wrapped in a Dungeondraft undo record (see _record_and_dispatch).
@@ -54,7 +54,11 @@ var _conns := []         # array of { "peer": StreamPeerTCP, "buf": String }
 var _undo_stack := []    # bridge-managed undo ops (see _build_op / _apply_op)
 var _redo_stack := []
 var _pending_switch := {}
-var _bridge_dirty := false
+var _edit_sequence := 0
+var _unrecorded_revision := 0
+var _saved_state_signature := "[0,[]]"
+var _save_sequence := 0
+var _pending_save_checkpoint := {}
 var _instance_id := ""
 var _asset_catalog := {}
 var _catalog_version := ""
@@ -179,10 +183,13 @@ func _record_and_dispatch(req : Dictionary) -> Dictionary:
 	if typeof(result) == TYPE_DICTIONARY and result.get("ok", false):
 		var op = _build_op(cmd, req, result, pre, terrain_before, cave_before)
 		if op != null:
+			_edit_sequence += 1
+			op["edit_id"] = _edit_sequence
 			_undo_stack.append(op)
 			_redo_stack = []   # a fresh edit invalidates the redo branch
 		if cmd in CREATE_CMDS or cmd in TRANSFORM_CMDS or cmd in TERRAIN_CMDS or cmd in CAVE_CMDS or cmd in ["delete_element", "place_pattern", "build_room", "set_terrain_slot", "add_level", "undo", "redo"]:
-			_bridge_dirty = true
+			if op == null and not cmd in ["undo", "redo"]:
+				_unrecorded_revision += 1
 	return result
 
 
@@ -369,6 +376,7 @@ func _safe_dispatch(req : Dictionary) -> Dictionary:
 		"list_asset_metadata": return _list_asset_metadata(req)
 		"open_map": return _open_map(req)
 		"save_map": return _save_map(req)
+		"confirm_save": return _confirm_save(req)
 		"list_asset_categories": return _ok({ "categories": ASSET_CATEGORIES })
 		"list_assets": return _list_assets(req)
 		"list_elements": return _list_elements(req)
@@ -425,7 +433,7 @@ const ASSET_CATEGORIES := [
 const SUPPORTED_COMMANDS := [
 	"ping", "get_status", "get_map_info", "get_capabilities", "refresh_asset_catalog",
 	"list_asset_categories", "list_assets", "list_asset_metadata", "list_elements", "get_element", "list_levels",
-	"open_map", "save_map", "place_object", "draw_wall", "draw_path", "add_light",
+	"open_map", "save_map", "confirm_save", "place_object", "draw_wall", "draw_path", "add_light",
 	"add_portal", "add_roof", "add_text", "place_pattern", "build_room", "set_terrain_slot",
 	"fill_terrain", "fill_region", "paint_terrain", "paint_path", "dig_cave", "clear_caves",
 	"move_element", "modify_object", "duplicate_object", "delete_element", "add_level", "set_level",
@@ -532,7 +540,7 @@ func _get_map_info() -> Dictionary:
 	var current_file = Global.Editor.get("CurrentMapFile")
 	var path = "" if current_file == null else str(current_file)
 	var master_node = _master()
-	var info := {"map_open": level != null, "path": path, "bridge_instance": _instance_id, "dirty": bool(master_node.get("IsModified")) or _bridge_dirty, "editor_dirty": bool(master_node.get("IsModified")), "bridge_dirty": _bridge_dirty, "saving": bool(master_node.get("IsSaving")), "loading": bool(master_node.get("IsLoadingMap"))}
+	var info := {"map_open": level != null, "path": path, "bridge_instance": _instance_id, "dirty": bool(master_node.get("IsModified")) or _state_signature() != _saved_state_signature, "editor_dirty": bool(master_node.get("IsModified")), "bridge_dirty": _state_signature() != _saved_state_signature, "saving": bool(master_node.get("IsSaving")), "loading": bool(master_node.get("IsLoadingMap"))}
 	if level != null:
 		info["size_tiles"] = [int(Global.World.WoxelDimensions.x / 256), int(Global.World.WoxelDimensions.y / 256)]
 		info["size_woxels"] = _vec(Global.World.WoxelDimensions)
@@ -585,8 +593,31 @@ func _save_map(req : Dictionary) -> Dictionary:
 	Global.Editor.set("CurrentMapFile", path)
 	if str(Global.Editor.get("CurrentMapFile")) != path:
 		return _err("editor did not accept destination path")
+	_save_sequence += 1
+	_pending_save_checkpoint = {"token": _save_sequence, "path": path, "state": _state_signature()}
 	save_button.emit_signal("pressed")
-	return _ok({"requested_path": path})
+	return _ok({"requested_path": path, "save_token": _save_sequence})
+
+func _state_signature() -> String:
+	var edit_ids := []
+	for op in _undo_stack:
+		edit_ids.append(op["edit_id"])
+	return JSON.print([_unrecorded_revision, edit_ids])
+
+
+# The Python client confirms only after validating the completed native JSON.
+# Capture the request's edit state, not edits that arrive while saving.
+func _confirm_save(req : Dictionary) -> Dictionary:
+	if _pending_save_checkpoint.empty() or req.get("save_token") != _pending_save_checkpoint["token"]:
+		return _err("save checkpoint is absent or stale")
+	if bool(_master().get("IsSaving")):
+		return _err("native save is still running")
+	if str(Global.Editor.get("CurrentMapFile")) != _pending_save_checkpoint["path"]:
+		return _err("saved map path changed before confirmation")
+	_saved_state_signature = _pending_save_checkpoint["state"]
+	_pending_save_checkpoint = {}
+	return _ok({"bridge_dirty": _state_signature() != _saved_state_signature})
+
 
 func _get_status() -> Dictionary:
 	var level = Global.World.GetCurrentLevel()

@@ -233,3 +233,16 @@ startup fatal; a second fresh launch opened the exact path and exposed protocol
 is useful for prepared templates but cannot guarantee native startup reliability
 or create dimensions. It does not kill other instances or retry automatically.
 See [CREATION_REVIEW.md](CREATION_REVIEW.md) and README for the accepted workflow.
+
+## Verified save checkpoint (2026-10-02)
+
+Protocol 19 / package 0.2.3 keeps 45 MCP tools. The native save request captures
+the current bridge undo-branch identity and non-recorded edit revision. After
+native JSON validation, the Python client confirms that save token. Undo/redo
+can return to the saved state without clearing history; later edits remain
+dirty, and non-recorded deletion cannot be erased by undoing a different edit.
+Stale confirmations fail. Manual UI saves are not checkpoint confirmation.
+`save_checkpoint_regression.py` passed all live transitions and scene preservation;
+a fresh MCP client saved successfully. DungeondraftConsole showed the protocol
+19 listener with no script/runtime errors after testing. The test left a saved
+empty disposable map. Native editor dirty state remains independently reported.

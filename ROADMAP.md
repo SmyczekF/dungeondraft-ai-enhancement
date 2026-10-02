@@ -82,7 +82,7 @@ call did not. See [MAP_LIFECYCLE_INVESTIGATION.md](MAP_LIFECYCLE_INVESTIGATION.m
 - [x] Correct selection activation and native object undo/redo; focused rendered regression and the 15-check bridge runner passed.
 - [x] **[PLAN CHANGED]** Remove automatic post-save reopening, which can destroy native save UI widgets before their delayed callback completes. Keep JSON validation; reload verification is a separate step.
 - [x] Confirm the public native save signal, focused history/render regression and fresh 45-tool MCP client save pass; the user confirmed no new console errors. The one-argument `Editor.SaveMap(false)` route failed silently and was replaced by the published `saveButton` signal.
-- [ ] Correct `bridge_dirty` after a verified save by tracking the saved edit checkpoint independently of undo history. The native file saves correctly, but the current flag remains true until reload.
+- [x] Correct `bridge_dirty` with a verified save checkpoint independent of undo history. Protocol 19 / package 0.2.3 passed live save/undo/redo, irreversible deletion, edits after a save request, stale token rejection and a fresh 45-tool MCP client save. Console clean; see `save_checkpoint_regression.py`.
 
 Creation investigation is complete: prepare new sizes manually, or start a
 fresh editor with a copy of a prepared native template. Continue the roadmap

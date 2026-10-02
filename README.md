@@ -96,7 +96,7 @@ PowerShell on Windows.
 On load you should see in the Dungeondraft log:
 
 ```
-[mcp-bridge] listening on 127.0.0.1:8787 (protocol v18)
+[mcp-bridge] listening on 127.0.0.1:8787 (protocol v19)
 ```
 
 ### 2. Install the MCP server

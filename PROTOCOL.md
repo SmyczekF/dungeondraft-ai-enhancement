@@ -40,8 +40,8 @@ Error:
 Coordinates are **woxel** (world pixel) space; map center is in
 `get_status -> map_center`. Every element is referenced by integer `id`
 (== Dungeondraft `node_id`); create commands return it, query commands list it.
-Protocol version 18 removes the unsafe new-map command and retains native
-save/open and paged inspection. Dungeondraft
+Protocol version 19 adds explicit native-save checkpoint confirmation to native
+save/open and paged inspection. The unsafe new-map command remains absent. Dungeondraft
 loads mod scripts after a map opens, so the title screen has no bridge.
 
 ### Read / query
@@ -93,7 +93,8 @@ node; default color is black.
 | cmd | params | result |
 | --- | --- | --- |
 | `open_map` | absolute existing `.dungeondraft_map` `path`, `discard_current=false` | `{ requested_path }` |
-| `save_map` | absolute `.dungeondraft_map` `path?`, `overwrite=false` | `{ requested_path }` |
+| `save_map` | absolute `.dungeondraft_map` `path?`, `overwrite=false` | `{ requested_path, save_token }` |
+| `confirm_save` (wire helper, not an MCP tool) | returned `save_token` | `{ bridge_dirty }` |
 
 Create new blank maps in Dungeondraft. The internal `Master.CreateNewMap` call
 raised editor exceptions when invoked by the mod and is not exposed. Opening a
@@ -113,10 +114,13 @@ Automatic reopen and its `verify_reopen` parameter were removed rather than
 adding a hardcoded delay or depending on private UI fields. Reopen clears
 bridge undo history.
 Use `discard_current=true` only after saving any work to retain. `dirty`
-combines Dungeondraft's editor flag with edits tracked by the bridge. Currently
-`bridge_dirty` is only cleared on reload and can remain true after verified
-saving; it is not an accurate unsaved-changes indicator. A save-checkpoint fix
-is tracked in the roadmap.
+combines Dungeondraft's editor flag with edits tracked by the bridge.
+`bridge_dirty` compares the current undo branch and non-recorded edit revision
+with the last verified save checkpoint. The Python save tool validates native
+JSON, then confirms the returned token. Edits arriving after the save request
+stay dirty; stale tokens are rejected. Undo/redo can return to a saved branch
+without clearing history. Non-recorded edits remain conservatively dirty until
+saved. Manual UI saves do not confirm the bridge checkpoint.
 
 Saving enters the editor's normal managed workflow through the published
 `Editor.saveButton` and its native `pressed` signal. This avoids the unsupported

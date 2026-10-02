@@ -165,8 +165,9 @@ def save_map(path: str = "", overwrite: bool = False) -> dict:
     previous_mtime_ns = target.stat().st_mtime_ns if target.exists() else None
     if not bridge.request("get_status").get("map_open"):
         raise BridgeError("no map open")
-    bridge.request("save_map", path=str(target), overwrite=overwrite)
+    pending = bridge.request("save_map", path=str(target), overwrite=overwrite)
     _wait_for_native_json(target, previous_mtime_ns)
+    bridge.request("confirm_save", save_token=pending["save_token"])
     return {"path": str(target), "bytes": target.stat().st_size, "valid_native_json": True}
 
 
