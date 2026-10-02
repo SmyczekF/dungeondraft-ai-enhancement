@@ -74,6 +74,7 @@ call did not. See [MAP_LIFECYCLE_INVESTIGATION.md](MAP_LIFECYCLE_INVESTIGATION.m
 - [x] Document standard stdio setup for other AI agents and require README coverage for future configuration changes.
 - [x] Verify GDScript lifecycle reachability: native reset/create methods are visible, but the pending managed request is neither an exposed property nor a registered Godot class. No clean pending-request entry point found.
 - [ ] Test the user-authorized **disposable prototype only** of the private New dialog callback; verify dimensions, reconnection and repeatability. Do not publish `create_map` based on prototype success alone.
+- [PLAN CHANGED] Suspend the temporary creation probe after the fresh-start native bounds crash; the probe was removed from the active mod directory. First verify manual creation with the committed bridge alone. The private callback was never dispatched, so its result remains unknown.
 - [ ] Assess external restart/open tools separately from blank-map creation. Reuse the existing Python MCP process and document any new configuration in the README.
 
 - [x] Correct selection activation and native object undo/redo; focused rendered regression and the 15-check bridge runner passed.

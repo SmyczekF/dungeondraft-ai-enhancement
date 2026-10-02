@@ -76,3 +76,33 @@ and save-notification review before its two reopen checks.
 The revised live save wrote a valid 187,130-byte blank native file, kept the
 same bridge instance, and preserved empty element counts. No new client config
 settings or application lifecycle tools were added.
+
+## Fresh-start crash while preparing the prototype (2026-10-02)
+
+The user reported a native `CowData<wchar_t>::get` fatal error: index 12,
+size 11. Windows Application event 1000 confirms a fresh Dungeondraft 1.2.0.1
+process (PID 16416) crashed at 10:17:43, exception `0x80000003`, executable
+offset `0x8ad68e`. The recent Mono logs are empty and the Windows event has no
+calling stack. The complete console context and exact first-map stage are
+still needed; the failure has not been attributed to a specific bridge call.
+
+No prototype creation request was sent by the agent. The uncommitted probe was
+present in the active mod folder during the reported startup. Its `start()`
+only starts a diagnostic listener; the private New callback requires a later
+explicit disposable-map request. Thus this is not a failed test of that
+callback, and does not prove that route works or fails.
+
+The probe and generated reachability report were archived outside the repository
+and removed from the active mod folder. Only the committed `mcp_bridge.gd`
+remains. **[PLAN CHANGED]** Suspend creation experimentation until a manual
+first-map load succeeds with that baseline and the console is reviewed.
+If it still fails, isolate the published bridge from a fresh run with the MCP
+disabled before changing production code. The missing override-tags warning
+has not been established as the cause.
+
+Further native inspection explains the unsuccessful earlier probe reload:
+`ModManager.Reload` reloads existing scripts with `keep_state=true`, without
+calling `start()` or discovering newly added script files. Source-only handler
+changes can reload; new startup logic must be tested in a fresh process.
+This corrects the earlier instruction to load the new listener through Reload
+Mods. It does not explain the native bounds failure.

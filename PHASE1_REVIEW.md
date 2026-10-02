@@ -134,3 +134,18 @@ Review steps:
 
 The private New dialog creation route is an authorized disposable experiment,
 not a supported creation API. See the lifecycle investigation for its status.
+
+## Current acceptance state after the fresh-start failure
+
+The user's fresh manual map-creation attempt reported a native string-array
+bounds fatal error before the agent ran the creation experiment. The exact
+crash stage and full console trace remain pending. The temporary probe has
+been removed; the active mod now contains only the committed bridge script.
+Do not treat Phase 1's follow-up or the creation prototype as accepted.
+First repeat manual first-map creation with this baseline. If it fails,
+repeat from a fresh process with MCP disabled to isolate the cause.
+
+Reload Mods only updates already loaded script code while preserving state;
+it does not rerun startup or discover new scripts. A new startup probe requires
+a full application restart by the user. No application restart or Computer Use
+was performed by the agent during this crash investigation.

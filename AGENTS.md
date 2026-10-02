@@ -55,8 +55,12 @@ blindly.
 
 If you change code (not just drive the map), the two halves reload differently:
 
-- **Mod** (`mod/.../mcp_bridge.gd`, GDScript): reload the mod inside Dungeondraft
-  (keeps the current map). Changing an existing handler needs only this.
+- **Mod** (`mod/.../mcp_bridge.gd`, GDScript): Reload Mods recompiles already
+  loaded scripts while preserving instance state; it does not rerun `start()`.
+  Use it for changes to existing handlers. Newly added script files, startup
+  initialization, and new instance state need a fresh Dungeondraft launch and
+  manual first-map load. Ask the user to perform that launch; do not assume a
+  new startup probe ran just because Reload Mods was clicked.
 - **Server** (`server/dungeondraft_mcp/server.py`): new/changed `@mcp.tool()`
   definitions need a **Codex MCP server restart**. Restart Codex after changing
   the Python server; adding a new tool needs both the mod and server reloaded.
