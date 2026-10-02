@@ -113,7 +113,14 @@ Automatic reopen and its `verify_reopen` parameter were removed rather than
 adding a hardcoded delay or depending on private UI fields. Reopen clears
 bridge undo history.
 Use `discard_current=true` only after saving any work to retain. `dirty`
-combines Dungeondraft's editor flag with edits tracked by the bridge.
+combines Dungeondraft's editor flag with edits tracked by the bridge. Currently
+`bridge_dirty` is only cleared on reload and can remain true after verified
+saving; it is not an accurate unsaved-changes indicator. A save-checkpoint fix
+is tracked in the roadmap.
+
+Saving enters the editor's normal managed workflow through the published
+`Editor.saveButton` and its native `pressed` signal. This avoids the unsupported
+GDScript-to-C# Action delegate boundary without private fields or input simulation.
 
 Dungeondraft 1.2.0.1 logged native `Prop._ExitTree` / `World.get_Level` exceptions
 when UI New Map replaced the populated sample, including with all mods disabled.

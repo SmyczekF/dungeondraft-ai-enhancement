@@ -131,12 +131,20 @@ acceptance are still required. See
 
 A later console review reported `Attempted to convert Variant to an
 unmarshallable managed type: Action` during the direct `Master.Save(path, null)`
-call. The bridge now calls documented `Editor.SaveMap(false)` after assigning
-and checking `CurrentMapFile`. The installed method declares its delegate
-argument optional; omitting it avoids explicitly sending a delegate value
-across the GDScript/Mono boundary. Fresh-session runtime and console validation
-are pending. If the documented call still logs a delegate error, this route
-must be revisited rather than treating a written file as a clean PASS.
+call. The subsequent documented `Editor.SaveMap(false)` experiment produced
+no native file and no console error. Its optional managed delegate argument is
+not a reliable GDScript boundary in the installed build; this direct call is
+not accepted.
+
+The bridge validates the published `Editor.saveButton` and emits its
+native `pressed` signal after assigning and checking `CurrentMapFile`. Native
+inspection confirms its managed callback waits one frame, then calls
+`SaveMap(false, null)` entirely within C#. This avoids GDScript delegate
+conversion and uses public mod properties and Godot signals. No input events
+or private dialog fields are involved. Live saving, the focused rendered
+history regression, and a fresh MCP client save passed; the user confirmed no
+new console errors. Saving preserves the scene and bridge history. See the
+lifecycle investigation for the test artifacts and remaining dirty-state issue.
 
 Automatic reopening was also removed because the native save status schedules
 a delayed widget callback. The focused regression and save contract changes

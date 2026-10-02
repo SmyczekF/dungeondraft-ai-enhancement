@@ -151,3 +151,60 @@ line was restored from the backup and read back successfully. All other current
 editor preferences were verified unchanged. The temporary prototype remains
 absent. The user has been asked to repeat the fresh-console first-map test with
 MCP enabled and leave the disposable map open; that comparison remains pending.
+
+### Matching MCP-enabled control and save regression
+
+The user-created fresh 35 x 20 map with MCP enabled succeeded without new console
+errors. Editor PID 26048 and console PID 10604 are fresh. Live protocol 18 ping,
+map status and inspection passed. The regression started with no active tool;
+selection activated SelectTool correctly. Three object undo/redo cycles,
+duplicate restoration, selected-object deletion and rendered equality passed.
+The user confirmed a clean console after these operations. The recreated PNG
+matches the original SHA-256
+`7a6a13fccb466f2ee523bfd71712b3e0f0cac0ee593c955612f650306b11bf52`.
+
+Saving through `Editor.SaveMap(false)` failed silently: no native file appeared
+within 60 seconds and the console showed no new error. The bridge stayed alive
+on the same instance, with zero remaining objects. Therefore the one-argument
+save call is not accepted, despite the published documentation. The installed
+managed method declares an additional Action argument; the precise silent-failure
+mechanism has not been established.
+
+A narrow alternative is staged for manual handler reload: validate the
+published `Editor.saveButton`, then emit its public `pressed` signal after
+setting the explicit native path. This enters the normal native managed save
+flow without passing a delegate across the GDScript boundary. It uses no mouse
+or keyboard input and no private dialog fields. Runtime save validation is
+pending; it must succeed and remain console-clean before acceptance.
+
+References: [published Editor properties](https://megasploot.github.io/DungeondraftModdingAPI/reference/Editor/)
+and [Godot 3.4 BaseButton signal](https://docs.godotengine.org/en/3.4/classes/class_basebutton.html#signals).
+
+
+### Save signal accepted; creation experiment still pending
+
+The user restarted the editor, created a blank 35 x 20 map, reloaded mods and
+reported no startup errors. Live protocol 18 ping and status passed on editor
+PID 25848. The public save signal wrote a valid 187,130-byte native file without
+changing the bridge instance. `history_regression.py` then passed selection
+from no active tool, three object undo/redo cycles, exact descriptor restoration,
+duplicate cleanup, selected-object deletion, rendered equality and native saving
+without scene replacement. A fresh MCP stdio client exposed 45 tools and saved
+the current native file successfully; `verify_reopen` is absent from its schema.
+The user confirmed no new console errors after all of those tests.
+
+Artifacts are in
+`C:\Users\smycz\Documents\ChatGPT\Dungeondraft\history-regression-native-save-signal-2026-10-02`:
+`report.json`, `before-undo.png`, `undone.png`, `after-redo.png`, and
+`cleaned.dungeondraft_map`. The map remains open with zero elements.
+
+This accepts the save entry point and history fixes, not a native startup-crash
+fix. Both no-mod and MCP-enabled fresh launches have now passed, and the precise
+cause of the earlier native fatal errors remains unclassified. The temporary
+creation probe is absent; no private New callback has been tested.
+
+A verified follow-up gap remains: `get_map_info` still reports
+`bridge_dirty=true` after the saved bridge edits. Saving preserves the undo
+stack, and the current flag is only cleared by a reload. Track a verified save
+checkpoint independently of undo history before treating this field as an
+accurate unsaved-changes indicator. No new client configuration is required.

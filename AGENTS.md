@@ -36,6 +36,8 @@ blindly.
   first if needed. `save_map` validates the written native JSON and preserves
   bridge undo history. Reopen separately after the save notification disappears;
   immediate reopening can leave native save UI callbacks pointing at freed widgets.
+  `bridge_dirty` currently stays true until reload even after verified saving;
+  do not treat it alone as proof of unsaved work. A checkpoint fix is pending.
   Do not call Dungeondraft's internal
   `Master.CreateNewMap` from the mod; it failed during a live map switch.
 - The bridge retires a previous native listener using an instance ID stored

@@ -1,5 +1,24 @@
 # Phase 1 review: native map save/open and inspection
 
+## Current follow-up status (2026-10-02)
+
+**Save/history correction accepted:** the public native save-button signal,
+focused rendered history regression and fresh MCP client save passed. The user
+confirmed no new console errors. Save validates native JSON and keeps the editor
+scene and undo history; it does not reopen automatically. There are still 45 tools.
+
+**Remaining:** the creation prototype has not been tested; it is absent from
+the active mod. Native startup failures have not been attributed to a root cause.
+`bridge_dirty` can remain true after a verified save and needs a save-checkpoint
+fix; do not use it alone as proof that changes are unsaved.
+
+Latest review artifacts:
+`C:\Users\smycz\Documents\ChatGPT\Dungeondraft\history-regression-native-save-signal-2026-10-02`.
+Inspect `report.json` and the before/undone/after PNGs. The after image exactly
+matches the before image. `cleaned.dungeondraft_map` contains no elements and
+remains open. The entries below retain the earlier test history and limitations.
+
+
 ## Delivered
 
 Protocol 18 / package 0.2.2 exposes 45 MCP tools. `create_map` was removed:
@@ -160,3 +179,18 @@ The fresh-console/no-mod control subsequently succeeded with no errors reported
 by the user. A matching fresh-console/MCP-enabled comparison is still needed;
 one control pass does not attribute the crash or complete acceptance. Wait for
 the user to close both programs before restoring the original active-mod setting.
+
+
+The matching fresh-console/MCP-enabled startup then passed. On the fresh 35 x
+20 map, selection began with no active tool and activated successfully; native
+object history, duplicate cleanup and rendered equality passed with a clean
+console reported by the user. The regression's save gate failed because
+`Editor.SaveMap(false)` wrote no file within 60 seconds, without reporting a
+console error. A public save-button signal entry point is staged for manual
+handler reload and live validation. The regression is still incomplete overall.
+
+
+The staged public save-button signal passed the next fresh-session test.
+The full focused regression and MCP client save passed, and the user confirmed
+the native console was clean. See the current-status section above for artifacts
+and the remaining dirty-reporting and creation tasks.

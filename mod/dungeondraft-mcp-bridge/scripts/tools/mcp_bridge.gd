@@ -574,10 +574,18 @@ func _save_map(req : Dictionary) -> Dictionary:
 	var file = File.new()
 	if file.file_exists(path) and not bool(req.get("overwrite", false)):
 		return _err("destination exists; set overwrite=true to replace it")
+	# SaveMap exposes an Action parameter that GDScript cannot marshal; its
+	# optional C# argument is not callable reliably through this build's bridge.
+	# The published saveButton's signal enters the normal managed save flow.
+	var save_button = Global.Editor.get("saveButton")
+	if not is_instance_valid(save_button) or not save_button is BaseButton:
+		return _err("native save button unavailable")
+	if save_button.disabled or save_button.get_signal_connection_list("pressed").empty():
+		return _err("native save action unavailable or disabled")
 	Global.Editor.set("CurrentMapFile", path)
 	if str(Global.Editor.get("CurrentMapFile")) != path:
 		return _err("editor did not accept destination path")
-	Global.Editor.call("SaveMap", false)
+	save_button.emit_signal("pressed")
 	return _ok({"requested_path": path})
 
 func _get_status() -> Dictionary:

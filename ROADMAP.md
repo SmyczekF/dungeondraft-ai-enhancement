@@ -79,7 +79,8 @@ call did not. See [MAP_LIFECYCLE_INVESTIGATION.md](MAP_LIFECYCLE_INVESTIGATION.m
 
 - [x] Correct selection activation and native object undo/redo; focused rendered regression and the 15-check bridge runner passed.
 - [x] **[PLAN CHANGED]** Remove automatic post-save reopening, which can destroy native save UI widgets before their delayed callback completes. Keep JSON validation; reload verification is a separate step.
-- [ ] Confirm the revised save and regression produce no new native console errors before accepting the follow-up.
+- [x] Confirm the public native save signal, focused history/render regression and fresh 45-tool MCP client save pass; the user confirmed no new console errors. The one-argument `Editor.SaveMap(false)` route failed silently and was replaced by the published `saveButton` signal.
+- [ ] Correct `bridge_dirty` after a verified save by tracking the saved edit checkpoint independently of undo history. The native file saves correctly, but the current flag remains true until reload.
 
 Manual blank-map creation remains the supported workflow while these tests are
 pending. No Computer Use is authorized for this investigation. Ask the user
