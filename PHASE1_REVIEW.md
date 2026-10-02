@@ -149,3 +149,14 @@ Reload Mods only updates already loaded script code while preserving state;
 it does not rerun startup or discover new scripts. A new startup probe requires
 a full application restart by the user. No application restart or Computer Use
 was performed by the agent during this crash investigation.
+
+The subsequent run with the temporary probe removed failed with native Mono
+`!klass`, a symptom also captured in the earlier no-mod control. A new fresh
+console/no-mod manual first-map test is pending. The local mod configuration
+has been backed up and temporarily disabled for that test; restore it afterward
+as described in the lifecycle investigation. Acceptance remains pending.
+
+The fresh-console/no-mod control subsequently succeeded with no errors reported
+by the user. A matching fresh-console/MCP-enabled comparison is still needed;
+one control pass does not attribute the crash or complete acceptance. Wait for
+the user to close both programs before restoring the original active-mod setting.

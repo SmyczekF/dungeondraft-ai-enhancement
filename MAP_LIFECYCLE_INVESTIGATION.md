@@ -106,3 +106,42 @@ calling `start()` or discovering newly added script files. Source-only handler
 changes can reload; new startup logic must be tested in a fresh process.
 This corrects the earlier instruction to load the new listener through Reload
 Mods. It does not explain the native bounds failure.
+
+## Second baseline failure and no-mod control (2026-10-02)
+
+With the temporary probe removed, the user reported a different fatal error:
+`Condition "!klass" is true` in `GDMonoInternals::tie_managed_to_unmanaged`.
+Windows event 1000 records fresh editor PID 26412 crashing at 10:29:22 with
+exception `0x80000003`, executable offset `0x45cdcf`. Its Mono log is empty.
+The console launcher was still PID 9212, started at 09:07:10; the editor itself
+was new. Restarting the launcher clears the captured output but is not yet a
+proven fix.
+
+The identical fatal text exists in the earlier `phase1-no-mod-error.log`
+control with all mods disabled. That proves this symptom can occur without
+MCP; it does not establish the root cause of this particular crash or exclude
+additional bridge faults.
+
+The editor is closed. Active mods were temporarily changed from MCP only to
+`active_mods=[]`, with the original configuration preserved byte-for-byte in
+`C:\Users\smycz\Documents\ChatGPT\Dungeondraft\crash-2026-10-02\config-before-mono-isolation.ini`.
+The user was asked to close the old launcher, start a fresh console launcher,
+and manually create one blank map. The result is pending. Restore that backup
+after the control test; the disabled setting is an investigation state on this
+PC, not a project distribution change. A mod discovery line is not proof that
+the mod is enabled. No application was started or stopped by the agent.
+
+### No-mod control result
+
+The user restarted the console launcher and reported successful manual blank-map
+creation with no new console errors. The fresh editor is PID 9740, started at
+10:33:20; the new console launcher is PID 7972, started at 10:33:19. The saved
+configuration still shows `active_mods=[]`.
+
+This is one successful control with two changed conditions (fresh launcher,
+MCP disabled), not proof of a particular cause or fix. The next comparison is
+the same fresh-launch/manual-first-map workflow with the original MCP setting
+restored. The user has been asked to close both programs before restoration,
+so the running editor cannot overwrite restored settings on exit. Restoration
+and the MCP-enabled comparison are pending. Preserve other newly saved editor
+preferences when restoring the original active-mod line from the backup.
