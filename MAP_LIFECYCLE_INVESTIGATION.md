@@ -145,3 +145,9 @@ restored. The user has been asked to close both programs before restoration,
 so the running editor cannot overwrite restored settings on exit. Restoration
 and the MCP-enabled comparison are pending. Preserve other newly saved editor
 preferences when restoring the original active-mod line from the backup.
+
+The user subsequently closed both applications. The original MCP-only active-mod
+line was restored from the backup and read back successfully. All other current
+editor preferences were verified unchanged. The temporary prototype remains
+absent. The user has been asked to repeat the fresh-console first-map test with
+MCP enabled and leave the disposable map open; that comparison remains pending.
