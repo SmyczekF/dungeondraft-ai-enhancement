@@ -114,3 +114,15 @@ are transformed into world space. Light bounds use Godot 3's
 [Light2D offset and texture_scale](https://docs.godotengine.org/en/3.4/classes/class_light2d.html).
 The expanded `phase1_smoke.py` covers two pattern shapes in one layer and both
 door kinds to catch collection/count and classification regressions.
+
+## Native creation reset investigation (2026-10-02)
+
+Read-only inspection found that the built-in New Map callback checks
+`Master.IsEditing`. For an open map it queues `NewMapOnStart` in `Master.MapOnStart`
+and invokes `Global.Restart`, which reloads the scene after clearing editor/mod
+state. `Master._Ready` executes the pending request. With no map open the callback
+calls `Master.CreateNewMap` directly. The earlier bridge command bypassed the
+native reset path; this supports a state-related explanation for the duplicate
+toolbar error but is not a verified fix. A clean GDScript entry point and runtime
+acceptance are still required. See
+[MAP_LIFECYCLE_INVESTIGATION.md](MAP_LIFECYCLE_INVESTIGATION.md).

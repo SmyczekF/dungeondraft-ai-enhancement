@@ -162,6 +162,51 @@ tool timeout allows full-map exports to finish. Ask Codex things like
 *"what's the status of my Dungeondraft map?"* or
 *"list some object assets and drop a chair in the middle of the map."*
 
+### Other AI agents and MCP clients
+
+The Python server uses standard MCP over **stdio**. Other local MCP clients can
+use the same installed entrypoint; Codex is not required by the server or mod.
+Register an absolute executable path in your client's MCP settings. For clients
+that use an `mcpServers` JSON object, the equivalent Windows configuration is:
+
+```json
+{
+  "mcpServers": {
+    "dungeondraft": {
+      "command": "C:\\absolute\\path\\to\\dungeondraft-mcp\\.venv\\Scripts\\dungeondraft-mcp.exe",
+      "args": []
+    }
+  }
+}
+```
+
+Configuration filenames and timeout settings vary by client. Allow at least
+120 seconds for long exports using your client's tool timeout setting. On
+macOS/Linux use the absolute `.venv/bin/dungeondraft-mcp` path; this release's
+editor integration is verified only on Windows. Restart or reconnect the MCP
+server after registering it or changing tool definitions.
+
+`AGENTS.md` contains usage instructions for agents that support that filename.
+For other agents, provide the connection checks and map workflow in their own
+instruction mechanism. Instructions do not install tools or start the editor.
+
+### Map creation and application startup
+
+The Python MCP server already runs **outside Dungeondraft**. Native map creation
+and application restart tools are under investigation and are not exposed in
+this release. There are no additional Codex TOML settings for this investigation.
+Any future required arguments, environment variables, or timeout changes must
+be documented here with equivalent settings for other MCP clients.
+
+Dungeondraft 1.2.0.1 accepts an existing `.dungeondraft_map` path at startup.
+An external launcher can therefore open a saved map without Computer Use.
+No width/height startup creation arguments were found in the inspected build.
+The editor's native New Map action queues a request and resets its scene when
+a map is already open; the earlier direct bridge call skipped that sequence.
+This is a new investigation candidate, not a verified creation API. See
+[MAP_LIFECYCLE_INVESTIGATION.md](MAP_LIFECYCLE_INVESTIGATION.md) for evidence,
+limitations, and the distinction between process restart and scene reset.
+
 ## Configuration
 
 These env vars configure the **Python server** (set them where the MCP client

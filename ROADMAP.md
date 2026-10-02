@@ -58,11 +58,28 @@ These tools cover tree placement and discovery, terrain paths, walls, rooms, pre
 - [x] Verify UI New Map and Reload Mods keep the bridge reachable. Fixed the reproducible port 8787 conflict by retiring the previous native listener using an Engine-owned instance ID. Two consecutive UI New Map switches and Reload Mods passed.
 - [x] Add a cached asset catalog with path, category, texture dimensions, nominal object footprint, and filename-derived tags. Refresh it after asset-pack changes. Curated semantic suitability belongs to Phase 3 asset selection rules.
 - [x] Add `get_capabilities` with protocol, Godot engine version, commands, active mods, and catalog version. Live asset lookup and metadata passed; the capability set is checked by the Phase 1 runner. The installed Dungeondraft product version is not exposed by the documented modding API; the manifest states the minimum supported version.
-- [PLAN CHANGED] Create each new blank map manually in Dungeondraft. The official [scripting lifecycle](https://megasploot.github.io/DungeondraftModdingAPI/Scripting/) starts tool mods only after a map loads, and the tested internal new-map call is unsafe from an active mod. The bridge can reopen saved maps through MCP. No custom launcher, generated native file, or UI workaround is planned.
+- [PLAN CHANGED] Create each new blank map manually in Dungeondraft. The official [scripting lifecycle](https://megasploot.github.io/DungeondraftModdingAPI/Scripting/) starts tool mods only after a map loads, and the tested internal new-map call is unsafe from an active mod. The bridge can reopen saved maps through MCP. The initial decision is revisited in the lifecycle investigation below; no new creation command has been accepted.
 
 **Exit achieved (2026-10-02):** After a manual blank-map load, a client can discover assets, inspect content, edit, save a native file, and reopen it through MCP. Protocol 18 passed the expanded `phase1_smoke.py` check: ten-tree path sample, PNG export, mixed scene with every descriptor kind and two separate floor shapes, native durability, pagination, and exact IDs/assets. A fresh MCP stdio client exposed 45 tools and completed live queries. See [PHASE1_REVIEW.md](PHASE1_REVIEW.md) for proof and review steps.
 
 **Editor limitation:** UI New Map from the populated sample also logged native `Prop._ExitTree` / `World.get_Level` exceptions with every mod disabled. An intermittent Mono startup fatal error occurred with mods disabled too. These remain Dungeondraft runtime issues; this project will not patch its executable. Start a fresh editor session for new blank maps after native exceptions. MCP `open_map` and `save_map` passed the automated workflow.
+
+## Phase 1 follow-up — Native map creation investigation
+
+The user proposed external process lifecycle tools. Inspection found that native
+New Map resets the editor before creating a replacement map; the rejected direct
+call did not. See [MAP_LIFECYCLE_INVESTIGATION.md](MAP_LIFECYCLE_INVESTIGATION.md).
+
+- [x] Inspect installed startup argument handling and native map creation/reset flow.
+- [x] Document standard stdio setup for other AI agents and require README coverage for future configuration changes.
+- [ ] Verify which native lifecycle operations are reachable from GDScript without private UI callbacks or managed-object injection.
+- [ ] If a clean entry point exists, test a disposable map transition, bridge reconnection, dimensions, native save/reopen, and repeated transitions before accepting `create_map`.
+- [ ] Assess external restart/open tools separately from blank-map creation. Reuse the existing Python MCP process and document any new configuration in the README.
+
+Manual blank-map creation remains the supported workflow while these tests are
+pending. No Computer Use is authorized for this investigation. Ask the user
+before closing or launching applications; mod reloads needed for probes are
+performed manually by the user.
 
 ## Phase 2 — Batch edits in the GDScript bridge
 
