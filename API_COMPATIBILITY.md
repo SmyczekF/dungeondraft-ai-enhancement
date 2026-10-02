@@ -56,8 +56,8 @@ native editor exceptions when invoked from the active bridge, including a
 duplicate `DESIGN` toolbar error, and the new bridge instance never started.
 The `create_map` command was removed. The documented `Editor.ForceOpenMap`
 successfully reopened a saved sample; the bridge releases its listener before
-that scene reload. `save_map` checks native JSON, then reopens and compares
-element counts by default.
+that scene reload. `save_map` checks native JSON without reopening.
+Reopen is a separate action after the native save notification finishes.
 
 The official [scripting lifecycle](https://megasploot.github.io/DungeondraftModdingAPI/Scripting/)
 loads tool mods only after a map finishes loading. **[PLAN CHANGED]** A user
@@ -126,3 +126,19 @@ native reset path; this supports a state-related explanation for the duplicate
 toolbar error but is not a verified fix. A clean GDScript entry point and runtime
 acceptance are still required. See
 [MAP_LIFECYCLE_INVESTIGATION.md](MAP_LIFECYCLE_INVESTIGATION.md).
+
+## Save callback boundary follow-up
+
+A later console review reported `Attempted to convert Variant to an
+unmarshallable managed type: Action` during the direct `Master.Save(path, null)`
+call. The bridge now calls documented `Editor.SaveMap(false)` after assigning
+and checking `CurrentMapFile`. The installed method declares its delegate
+argument optional; omitting it avoids explicitly sending a delegate value
+across the GDScript/Mono boundary. Fresh-session runtime and console validation
+are pending. If the documented call still logs a delegate error, this route
+must be revisited rather than treating a written file as a clean PASS.
+
+Automatic reopening was also removed because the native save status schedules
+a delayed widget callback. The focused regression and save contract changes
+are described in PHASE1_REVIEW.md. The temporary creation prototype is not a
+published MCP tool and requires the user's manual fresh session before testing.

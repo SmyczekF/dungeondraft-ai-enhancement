@@ -40,7 +40,9 @@ Phase 1's live acceptance procedure and current verification status are in
   `get_map_info`, `get_capabilities`, `list_asset_categories`, `list_assets`,
   `list_asset_metadata` (paged paths, dimensions and filename tags).
 - **Map files:** `open_map` and `save_map` manage native editable maps.
-  `save_map` checks the file and, by default, reopens it to verify element counts.
+  `save_map` validates the written native JSON and preserves the open scene.
+  To verify a reload, call `open_map` separately after the save notification
+  disappears. Immediate scene replacement can outlive native save UI callbacks.
   Create a new blank map in Dungeondraft before the MCP edits it. The installed
   editor's internal new-map call raised native exceptions when invoked by the
   bridge, so the unsafe `create_map` command was removed. Saved maps can be

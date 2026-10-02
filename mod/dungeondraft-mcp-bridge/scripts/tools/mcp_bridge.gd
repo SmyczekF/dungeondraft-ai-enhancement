@@ -194,6 +194,8 @@ func _build_op(cmd, req, result, pre, terrain_before, cave_before = null):
 		if id != null and int(id) >= 0:
 			var node = Global.World.GetNodeByID(int(id))
 			if node != null:
+				if cmd in ["place_object", "duplicate_object"]:
+					return { "kind": "create_object", "node": node, "parent": node.get_parent(), "id": int(id), "data": node.Save(false) }
 				return { "kind": "create", "node": node, "parent": node.get_parent(), "id": int(id) }
 	elif cmd in TRANSFORM_CMDS and pre != null:
 		var node = Global.World.GetNodeByID(int(req["id"]))
@@ -213,8 +215,10 @@ func _build_op(cmd, req, result, pre, terrain_before, cave_before = null):
 func _do_undo() -> Dictionary:
 	if _undo_stack.empty():
 		return _ok({ "undone": false, "reason": "nothing to undo" })
-	var op = _undo_stack.pop_back()
-	_apply_op(op, true)
+	var op = _undo_stack.back()
+	if not _apply_op(op, true):
+		return _err("cannot undo object creation: its original level or element is unavailable")
+	_undo_stack.pop_back()
 	_redo_stack.append(op)
 	return _ok({ "undone": true, "kind": op["kind"], "undo_depth": _undo_stack.size() })
 
@@ -222,14 +226,39 @@ func _do_undo() -> Dictionary:
 func _do_redo() -> Dictionary:
 	if _redo_stack.empty():
 		return _ok({ "redone": false, "reason": "nothing to redo" })
-	var op = _redo_stack.pop_back()
-	_apply_op(op, false)
+	var op = _redo_stack.back()
+	if not _apply_op(op, false):
+		return _err("cannot redo object creation: its original level, ID or asset is unavailable")
+	_redo_stack.pop_back()
 	_undo_stack.append(op)
 	return _ok({ "redone": true, "kind": op["kind"], "redo_depth": _redo_stack.size() })
 
 
-func _apply_op(op, undo : bool):
+func _apply_op(op, undo : bool) -> bool:
 	match op["kind"]:
+		"create_object":
+			# Prop._ExitTree removes its native search-table entry. Reattaching the
+			# same Prop recreates render children but leaves that entry stale.
+			# Restore a fresh Prop through the native serializer instead.
+			var level = Global.World.GetCurrentLevel()
+			if level == null or not is_instance_valid(op["parent"]) or op["parent"] != level.Objects:
+				return false
+			if undo:
+				var node = op["node"]
+				if not is_instance_valid(node) or node.get_parent() != level.Objects:
+					return false
+				op["data"] = node.Save(false)
+				_deselect_node(node)
+				_detach_node(node, int(op["id"]))
+				node.queue_free()
+				op["node"] = null
+			else:
+				if Global.World.HasNodeID(int(op["id"])):
+					return false
+				var restored = level.Objects.LoadObject(op["data"])
+				if restored == null:
+					return false
+				op["node"] = restored
 		"create":
 			if undo:
 				_detach_node(op["node"], int(op["id"]))
@@ -241,6 +270,7 @@ func _apply_op(op, undo : bool):
 			_restore_splat(op["before"] if undo else op["after"])
 		"cave":
 			_restore_cave(op["before"] if undo else op["after"])
+	return true
 
 
 func _detach_node(node, id : int):
@@ -547,7 +577,7 @@ func _save_map(req : Dictionary) -> Dictionary:
 	Global.Editor.set("CurrentMapFile", path)
 	if str(Global.Editor.get("CurrentMapFile")) != path:
 		return _err("editor did not accept destination path")
-	master_node.call("Save", path, null)
+	Global.Editor.call("SaveMap", false)
 	return _ok({"requested_path": path})
 
 func _get_status() -> Dictionary:
@@ -1560,6 +1590,9 @@ func _duplicate_object(req : Dictionary) -> Dictionary:
 func _delete_element(req : Dictionary) -> Dictionary:
 	var ident = req.get("id")
 	if ident == null: return _err("missing 'id'")
+	var node = Global.World.GetNodeByID(int(ident))
+	if node != null:
+		_deselect_node(node)
 	var ok = Global.World.DeleteNodeByID(int(ident))
 	return _ok({ "deleted": ok, "id": ident })
 
@@ -1777,21 +1810,51 @@ func _element_rect(node):
 # ---------------------------------------------------------------------------
 
 func _select_elements(req : Dictionary) -> Dictionary:
-	var stool = Global.Editor.Tools["SelectTool"]
-	stool.DeselectAll()
-	var n := 0
+	if not Global.Editor.Tools.has("SelectTool"):
+		return _err("SelectTool unavailable")
+	var nodes := []
 	for ident in req.get("ids", []):
 		var node = Global.World.GetNodeByID(int(ident))
-		if node != null:
-			stool.SelectThing(node, true)
-			n += 1
-	stool.EnableTransformBox(true)
-	return _ok({ "selected": n })
+		if node != null and not node.is_queued_for_deletion():
+			nodes.append(node)
+	if nodes.empty():
+		_clear_selection()
+		return _ok({ "selected": 0 })
+	# EnableTransformBox requires widgets created by SelectTool.Enable().
+	# Quickswitch runs the editor's complete, documented activation lifecycle.
+	if not Global.Editor.IsToolActive("SelectTool"):
+		Global.Editor.Toolset.Quickswitch("SelectTool")
+	if not Global.Editor.IsToolActive("SelectTool"):
+		return _err("could not activate SelectTool")
+	var selection_tool = Global.Editor.Tools["SelectTool"]
+	selection_tool.ClearTransformSelection()
+	for node in nodes:
+		selection_tool.SelectThing(node, true)
+	selection_tool.EnableTransformBox(true)
+	return _ok({ "selected": nodes.size() })
 
 
 func _clear_selection() -> Dictionary:
-	Global.Editor.Tools["SelectTool"].DeselectAll()
+	if not Global.Editor.Tools.has("SelectTool"):
+		return _err("SelectTool unavailable")
+	var selection_tool = Global.Editor.Tools["SelectTool"]
+	if Global.Editor.IsToolActive("SelectTool"):
+		selection_tool.ClearTransformSelection()
+	else:
+		selection_tool.DeselectAll()
 	return _ok({ "cleared": true })
+
+
+func _deselect_node(node):
+	if not Global.Editor.Tools.has("SelectTool"):
+		return
+	var selection_tool = Global.Editor.Tools["SelectTool"]
+	var selected = selection_tool.get("Selected")
+	if selected == null or not node in selected:
+		return
+	selection_tool.SelectThing(node, false)
+	if Global.Editor.IsToolActive("SelectTool"):
+		selection_tool.EnableTransformBox(selection_tool.get("Selected").size() > 0)
 
 
 # ---------------------------------------------------------------------------

@@ -147,12 +147,13 @@ def open_map(path: str, discard_current: bool = False) -> dict:
 
 
 @mcp.tool()
-def save_map(path: str = "", overwrite: bool = False, verify_reopen: bool = True) -> dict:
-    """Save the native map and verify its JSON; by default reopen it and confirm the element counts.
+def save_map(path: str = "", overwrite: bool = False) -> dict:
+    """Save the native map and verify that the written file is complete native JSON.
 
     When path is omitted, save over the current native file. For a new path, set
-    overwrite=True only when replacing an existing file. Reopening reloads the
-    Dungeondraft mod and clears the bridge undo history.
+    overwrite=True only when replacing an existing file. Saving preserves the
+    current editor scene and bridge undo history. Use open_map separately to
+    reopen a saved file after Dungeondraft's save notification has finished.
     """
     if not path:
         info = bridge.request("get_map_info")
@@ -162,21 +163,11 @@ def save_map(path: str = "", overwrite: bool = False, verify_reopen: bool = True
     if target.exists() and not overwrite:
         raise BridgeError(f"destination exists; set overwrite=True to replace it: {target}")
     previous_mtime_ns = target.stat().st_mtime_ns if target.exists() else None
-    before = bridge.request("get_status")
-    if not before.get("map_open"):
+    if not bridge.request("get_status").get("map_open"):
         raise BridgeError("no map open")
     bridge.request("save_map", path=str(target), overwrite=overwrite)
     _wait_for_native_json(target, previous_mtime_ns)
-    result = {"path": str(target), "bytes": target.stat().st_size, "valid_native_json": True}
-    if verify_reopen:
-        previous_instance = bridge.request("get_map_info")["bridge_instance"]
-        bridge.request("open_map", path=str(target), discard_current=True)
-        result["map"] = _wait_for_map(previous_instance=previous_instance, path=str(target))
-        after = bridge.request("get_status")
-        if after.get("counts") != before.get("counts"):
-            raise BridgeError(f"map reopened with different element counts: before={before.get('counts')}, after={after.get('counts')}")
-        result["counts_verified"] = after.get("counts")
-    return result
+    return {"path": str(target), "bytes": target.stat().st_size, "valid_native_json": True}
 
 
 @mcp.tool()

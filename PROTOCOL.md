@@ -105,8 +105,13 @@ UI New Map from colliding with the previous bridge on port 8787. Reload Mods
 also passed live testing. A bind failure caused by another process is logged
 without a modal alert. The Python
 `open_map` tool waits for a new `bridge_instance` and verifies the path. The Python
-`save_map` waits for parseable native JSON and, by default, reopens the
-map and compares per-kind element counts. Reopen clears bridge undo history.
+`save_map` waits for parseable native JSON without replacing the scene.
+To check native reload durability, call `open_map` separately after the save
+notification disappears and compare IDs/assets/counts. Immediate reopening
+can destroy widgets still referenced by Dungeondraft's delayed save callback.
+Automatic reopen and its `verify_reopen` parameter were removed rather than
+adding a hardcoded delay or depending on private UI fields. Reopen clears
+bridge undo history.
 Use `discard_current=true` only after saving any work to retain. `dirty`
 combines Dungeondraft's editor flag with edits tracked by the bridge.
 

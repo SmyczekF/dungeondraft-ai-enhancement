@@ -28,6 +28,14 @@ def one_asset(category: str, search: str) -> str:
     return result["assets"][0]
 
 
+def save_and_review_reopen(path: Path) -> dict:
+    saved = save_map(path=str(path))
+    input("Wait until Dungeondraft's save notification disappears, check the console "
+          "for errors, then press Enter to reopen the saved disposable map: ")
+    saved["map"] = open_map(str(path), discard_current=True)
+    return saved
+
+
 def verify_inspection(output_dir: Path, sample_path: Path) -> dict:
     """Check each descriptor kind and native durability on a mixed scene."""
     wall = bridge.request("draw_wall", points=[[1000, 1000], [2200, 1000],
@@ -55,7 +63,7 @@ def verify_inspection(output_dir: Path, sample_path: Path) -> dict:
     if before["patterns"]["total"] != 2:
         raise RuntimeError("pattern count must count shapes, not layer containers")
     mixed_path = output_dir / "mixed.dungeondraft_map"
-    saved = save_map(path=str(mixed_path))
+    saved = save_and_review_reopen(mixed_path)
     after = {kind: list_elements(kind=kind, limit=500) for kind in kinds}
     for kind in kinds:
         expected = {(item["id"], item.get("asset")) for item in before[kind]["elements"]}
@@ -89,6 +97,7 @@ def verify_inspection(output_dir: Path, sample_path: Path) -> dict:
 
 
 def run(output_dir: Path) -> dict:
+    output_dir = output_dir.resolve()
     if output_dir.exists() and any(output_dir.iterdir()):
         raise RuntimeError(f"output directory must be empty: {output_dir}")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -144,7 +153,7 @@ def run(output_dir: Path) -> dict:
         raise RuntimeError("object descriptors lack bounds or layer")
 
     native_path = output_dir / "sample.dungeondraft_map"
-    saved = save_map(path=str(native_path), verify_reopen=True)
+    saved = save_and_review_reopen(native_path)
     level_data = next(iter(json.loads(native_path.read_text(encoding="utf-8-sig"))["world"]["levels"].values()))
     if len(level_data["objects"]) != 10:
         raise RuntimeError(f"native file contains {len(level_data['objects'])} trees, expected 10")

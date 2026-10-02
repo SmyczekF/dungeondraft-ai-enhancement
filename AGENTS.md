@@ -33,8 +33,10 @@ blindly.
   Godot engine version, active mods and catalog version. `refresh_asset_catalog`
   rebuilds the cache after asset packs change.
 - `open_map` replaces the current map only with `discard_current=true`. Save
-  first if needed. `save_map` reopens by default to verify native durability,
-  which clears the bridge undo history. Do not call Dungeondraft's internal
+  first if needed. `save_map` validates the written native JSON and preserves
+  bridge undo history. Reopen separately after the save notification disappears;
+  immediate reopening can leave native save UI callbacks pointing at freed widgets.
+  Do not call Dungeondraft's internal
   `Master.CreateNewMap` from the mod; it failed during a live map switch.
 - The bridge retires a previous native listener using an instance ID stored
   on Godot's Engine singleton. Keep transport ownership outside Editor/World,

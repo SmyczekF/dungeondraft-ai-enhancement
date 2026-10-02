@@ -37,3 +37,42 @@ Codex `config.toml` registers that MCP process; the server defines its tools. `A
 - No Computer Use, app restart, map modification, or new creation runtime test was performed in this investigation. A fresh-start MCP creation test cannot currently be dispatched because the bridge does not exist before the first map loads.
 
 Sources: [Dungeondraft scripting lifecycle](https://megasploot.github.io/DungeondraftModdingAPI/Scripting/), [Editor API](https://megasploot.github.io/DungeondraftModdingAPI/reference/Editor/), [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli), [AGENTS.md instructions](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
+
+## Follow-up: live reachability and regression diagnosis
+
+The read-only GDScript probe confirmed that `CreateNewMap` and `Global.Restart`
+are callable, but `Master.MapOnStart` is not an exposed property and
+`ClassDB.class_exists("NewMapOnStart")` is false. The managed pending request
+cannot be constructed through this inspected Godot interface. The New dialog
+does expose private width/height widgets and its confirmation callback.
+The user authorized a disposable prototype of that route only. Runtime
+validation is pending a manual mod reload; this is not a published MCP tool.
+
+Live retesting also exposed two bridge bugs independently of map creation:
+
+- `SelectTool.EnableTransformBox(true)` requires widgets initialized by the
+  native tool activation lifecycle. The bridge now uses documented
+  `Toolset.Quickswitch("SelectTool")` before selecting elements.
+- Detaching and reattaching an existing `Prop` for undo/redo does not restore
+  its native search-table registration and recreates its render children.
+  Object creation undo now saves native data and retires the old node; redo
+  uses `Objects.LoadObject` to restore a fresh node with the same ID.
+  Deletion deselects the node first.
+
+Three reported native pointer errors after the functional regression have a
+strong code-level explanation: `Infobar.OnSaveEnd` schedules a callback two
+seconds later that changes one visibility flag and two colors. Automatically
+reopening immediately after file creation can free those widgets before the
+callback. The reported native call signatures match those three operations.
+This attribution still needs console confirmation from the revised live save.
+
+**[PLAN CHANGED]** `save_map` validates complete native JSON and keeps the
+current scene. Automatic reopening and `verify_reopen` were removed. A separate
+`open_map` call can verify reload durability after the native save notification
+finishes. We have not added a fixed delay or a private UI completion probe to
+the production save tool. `phase1_smoke.py` explicitly pauses for human console
+and save-notification review before its two reopen checks.
+
+The revised live save wrote a valid 187,130-byte blank native file, kept the
+same bridge instance, and preserved empty element counts. No new client config
+settings or application lifecycle tools were added.

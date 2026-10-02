@@ -30,7 +30,7 @@ Phase 1 corrections:
 - Report an empty path for an unsaved map; omit the unavailable Dungeondraft
   product version instead of reporting `"Null"`. Capabilities report Godot's version.
 
-## Live verification on 2026-10-02
+## Earlier live verification on 2026-10-02
 
 Installed editor: Dungeondraft 1.2.0.1, Godot 3.4.2, MCP bridge protocol 18.
 
@@ -96,4 +96,41 @@ its rebuilt executable passed the MCP stdio check.
    The mod source is already in Dungeondraft's configured development directory;
    no manual copying is required on this PC.
 
-Phase 1 ends here for review. Phase 2 adds bounded native batches and job control.
+Phase 1 follow-up ends here for review. Phase 2 adds bounded native batches and job control.
+
+## Follow-up regression verification (2026-10-02)
+
+The earlier MCP PASS results did not prove a clean native console. Subsequent
+user console reports exposed selection initialization and object undo/redo
+bugs. These are fixed in the bridge using native tool activation and native
+object serialization/loading; they were not solved by listener ownership.
+
+On a fresh user-started session, the focused `history_regression.py` verified
+three object undo/redo cycles, exact ID/asset/transform/bounds, duplicate redo,
+and deletion of restored selected objects. The exported PNG after redo was
+byte-identical to the original; the undone image differed. The existing bridge
+runner then passed 15 checks and cleaned up all six of its elements.
+
+The user subsequently reported one boolean and two color native pointer errors.
+Inspection traced a matching sequence to Dungeondraft's delayed save UI callback;
+immediate automatic reopen was removed from `save_map`. Saving now validates the
+file and preserves the current bridge instance. Console confirmation is pending;
+this follow-up is **not accepted as console-clean yet**.
+
+Focused artifacts before the save-contract change:
+`C:\Users\smycz\Documents\ChatGPT\Dungeondraft\history-regression-2026-10-02-absolute`.
+The revised live save is `save-only-2026-10-02.dungeondraft_map` in that workspace.
+
+Review steps:
+
+1. Open a fresh disposable blank map, then run
+   `.\.venv\Scripts\python.exe .\history_regression.py --output-dir <new-directory>`.
+   Inspect its PNGs and **check the Dungeondraft console** before accepting PASS.
+2. Run `phase1_smoke.py` for mixed-scene reload verification. It now pauses
+   before each immediate post-save reopen; wait for the save notification to
+   disappear and review the console before pressing Enter.
+3. Restart the client's MCP process to load the changed `save_map` schema.
+   There are still 45 tools and no new `config.toml` requirements.
+
+The private New dialog creation route is an authorized disposable experiment,
+not a supported creation API. See the lifecycle investigation for its status.

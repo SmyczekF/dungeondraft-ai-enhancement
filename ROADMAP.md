@@ -53,7 +53,7 @@ These tools cover tree placement and discovery, terrain paths, walls, rooms, pre
 
 - [x] Implement `open_map`, `save_map`, and `get_map_info`; verify the installed 1.2.0.1 editor can save and reopen a map through MCP.
 - [REJECTED] `create_map` through the in-editor bridge. The internal `Master.CreateNewMap` call raised editor exceptions (`SelectTool.EnableTransformBox`, `Objects.RemoveFromSearchTable`, duplicate `DESIGN` toolbar) and left the bridge disconnected. The published modding API has no supported new-map method. The unsafe command was removed; native-file generation and UI simulation are not planned.
-- [x] Make save destinations and overwrite explicit; wait for a complete native JSON file and reopen to compare element counts by default. The live native file retained ten trees, and MCP reopen preserved their IDs and assets.
+- [x] Make save destinations and overwrite explicit; wait for a complete native JSON file. **[PLAN CHANGED]** Save preserves the scene; reload verification is a separate action after the native save notification finishes. The live native file retained ten trees, and MCP reopen preserved their IDs and assets.
 - [x] Implement paginated `list_elements` and descriptors with geometry, bounds, layer, and asset where exposed. All eight kinds passed live save/reopen, ID/asset checks, pagination and individual lookup. Pattern shapes are counted independently of layers; free and mounted portals are distinguished; free portal and light bounds use world coordinates.
 - [x] Verify UI New Map and Reload Mods keep the bridge reachable. Fixed the reproducible port 8787 conflict by retiring the previous native listener using an Engine-owned instance ID. Two consecutive UI New Map switches and Reload Mods passed.
 - [x] Add a cached asset catalog with path, category, texture dimensions, nominal object footprint, and filename-derived tags. Refresh it after asset-pack changes. Curated semantic suitability belongs to Phase 3 asset selection rules.
@@ -72,9 +72,13 @@ call did not. See [MAP_LIFECYCLE_INVESTIGATION.md](MAP_LIFECYCLE_INVESTIGATION.m
 
 - [x] Inspect installed startup argument handling and native map creation/reset flow.
 - [x] Document standard stdio setup for other AI agents and require README coverage for future configuration changes.
-- [ ] Verify which native lifecycle operations are reachable from GDScript without private UI callbacks or managed-object injection.
-- [ ] If a clean entry point exists, test a disposable map transition, bridge reconnection, dimensions, native save/reopen, and repeated transitions before accepting `create_map`.
+- [x] Verify GDScript lifecycle reachability: native reset/create methods are visible, but the pending managed request is neither an exposed property nor a registered Godot class. No clean pending-request entry point found.
+- [ ] Test the user-authorized **disposable prototype only** of the private New dialog callback; verify dimensions, reconnection and repeatability. Do not publish `create_map` based on prototype success alone.
 - [ ] Assess external restart/open tools separately from blank-map creation. Reuse the existing Python MCP process and document any new configuration in the README.
+
+- [x] Correct selection activation and native object undo/redo; focused rendered regression and the 15-check bridge runner passed.
+- [x] **[PLAN CHANGED]** Remove automatic post-save reopening, which can destroy native save UI widgets before their delayed callback completes. Keep JSON validation; reload verification is a separate step.
+- [ ] Confirm the revised save and regression produce no new native console errors before accepting the follow-up.
 
 Manual blank-map creation remains the supported workflow while these tests are
 pending. No Computer Use is authorized for this investigation. Ask the user
