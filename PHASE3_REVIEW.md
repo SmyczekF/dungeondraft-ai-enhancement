@@ -44,3 +44,12 @@ No arbitrary new-map creation, roofs, mounted doors or pattern-floor batch
 support is implied by this milestone. Noise is omitted until an actual visual
 feature needs it. Specialized forest/road tools are omitted in favor of one
 validated schema; targeted named-feature revision is the next phase.
+
+## Polygon guard follow-up
+
+An additional live check exposed adjacent collinear backtracking that the
+nonadjacent intersection check missed. The validator now rejects it before
+editing. A two-operation batch accepted the rectangle during preflight and
+rejected only the backtracking polygon at index 1; water and all 52 objects
+remained unchanged. The diagnostic water edit was undone, restoring the
+verified save checkpoint.

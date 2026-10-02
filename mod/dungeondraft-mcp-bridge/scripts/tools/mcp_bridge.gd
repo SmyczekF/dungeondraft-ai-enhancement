@@ -2424,6 +2424,12 @@ func _batch_polygon(points) -> bool:
 		if not _batch_point(next):
 			return false
 		var b = Vector2(next[0], next[1])
+		var previous = points[(i + points.size() - 1) % points.size()]
+		var incoming = Vector2(previous[0], previous[1]) - a
+		var outgoing = b - a
+		# Adjacent edges may share their endpoint, but must not backtrack.
+		if abs(incoming.cross(outgoing)) < 0.01 and incoming.dot(outgoing) > 0.0:
+			return false
 		area += a.cross(b)
 		for j in range(i + 1, points.size()):
 			if a.distance_to(Vector2(points[j][0], points[j][1])) < 0.01:
