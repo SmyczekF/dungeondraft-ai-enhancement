@@ -7,8 +7,11 @@ focused rendered history regression and fresh MCP client save passed. The user
 confirmed no new console errors. Save validates native JSON and keeps the editor
 scene and undo history; it does not reopen automatically. There are still 45 tools.
 
-**Remaining:** the creation prototype has not been tested; it is absent from
-the active mod. Native startup failures have not been attributed to a root cause.
+**Creation decision:** the private prototype was tested and rejected: blank
+switches passed, but populated native replacement raised cleanup/disposed-object
+exceptions. It is removed. A Windows launcher opens prepared native templates;
+see [CREATION_REVIEW.md](CREATION_REVIEW.md). Native startup failures remain
+intermittent and have not been attributed to a root cause.
 `bridge_dirty` can remain true after a verified save and needs a save-checkpoint
 fix; do not use it alone as proof that changes are unsaved.
 

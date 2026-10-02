@@ -194,20 +194,36 @@ instruction mechanism. Instructions do not install tools or start the editor.
 
 ### Map creation and application startup
 
-The Python MCP server already runs **outside Dungeondraft**. Native map creation
-and application restart tools are under investigation and are not exposed in
-this release. There are no additional Codex TOML settings for this investigation.
-Any future required arguments, environment variables, or timeout changes must
-be documented here with equivalent settings for other MCP clients.
+The Python MCP server already runs **outside Dungeondraft**. No additional
+Codex TOML settings or second MCP server are needed for the Windows launcher.
+Other agents can run the same PowerShell command through their shell tool.
 
-Dungeondraft 1.2.0.1 accepts an existing `.dungeondraft_map` path at startup.
-An external launcher can therefore open a saved map without Computer Use.
-No width/height startup creation arguments were found in the inspected build.
-The editor's native New Map action queues a request and resets its scene when
-a map is already open; the earlier direct bridge call skipped that sequence.
-This is a new investigation candidate, not a verified creation API. See
-[MAP_LIFECYCLE_INVESTIGATION.md](MAP_LIFECYCLE_INVESTIGATION.md) for evidence,
-limitations, and the distinction between process restart and scene reset.
+Prepare a blank native map once for each size you need. With the editor closed,
+launch a fresh copy (run from the repository root):
+
+```powershell
+.\scripts\Start-Dungeondraft.ps1 -MapPath 'C:\maps\blank-30x25.dungeondraft_map' -CopyTo 'C:\maps\encounter.dungeondraft_map' -LogDirectory 'C:\maps\encounter-logs' -ShowWindow
+```
+
+`CopyTo` must be new, its parent must exist, and `LogDirectory` must be new or
+empty. Both are optional; without `CopyTo` the source map is opened directly.
+Use `-ExecutablePath` for a nonstandard installation. The script refuses to
+launch while Dungeondraft is running and never closes or kills another instance.
+`-ShowWindow` explicitly shows the interactive editor; otherwise it requests a
+hidden window. Logs capture stdout/stderr without DungeondraftConsole's Start
+button. After launch, verify MCP `ping` and `get_status` before editing.
+
+Startup from a saved template passed on Windows 1.2.0.1; an earlier attempt hit
+an intermittent native Mono fatal error. Process launch alone is not readiness,
+and the script does not retry crashes automatically. Templates retain their
+original dimensions, settings and asset-pack dependencies. New arbitrary sizes
+still require manual native creation; no width/height startup arguments exist
+in the inspected build.
+
+**[REJECTED]** The private New-dialog prototype created two blank maps cleanly,
+but replacement of a populated map raised repeated native object-cleanup
+exceptions and a disposed Toolset error. It is removed and is not a tool.
+See [CREATION_REVIEW.md](CREATION_REVIEW.md) for test evidence and the decision.
 
 ## Configuration
 

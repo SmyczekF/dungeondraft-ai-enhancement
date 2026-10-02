@@ -208,3 +208,28 @@ A verified follow-up gap remains: `get_map_info` still reports
 stack, and the current flag is only cleared by a reload. Track a verified save
 checkpoint independently of undo history before treating this field as an
 accurate unsaved-changes indicator. No new client configuration is required.
+
+## Final creation decision (2026-10-02)
+
+The private callback was finally dispatched. Blank 35x20 -> 24x18 -> 20x16
+switches passed, rejected invalid requests without switching, reconnected with
+new bridge instance IDs, and retained the same Windows process. Editing,
+selection, three undo/redo cycles, byte-identical render restoration and native
+saving passed on the created map. The user confirmed clean console output.
+
+The next fresh-session test populated all eight kinds: ten trees, one wall,
+one path, one light, mounted/free portals, roof, pattern and text; two trees were
+selected. Replacement produced and saved a correctly sized blank 24x17 file,
+but the user reported repeated `ArgumentOutOfRangeException` in
+`World.get_Level -> Prop._ExitTree`, `Node ID 10 does not exist`, and
+`ObjectDisposedException` in `Toolset.Shrink`. Functional reconnection is not
+acceptance. **[REJECTED]** Shipping this private creation adapter. The probe is
+removed; no protocol/tool changes or editor patches are accepted.
+
+An external fresh-process launch of a copy of the saved blank 20x16 template
+was tested with stdout/stderr capture. The first launch hit native `!klass`
+startup fatal; a second fresh launch opened the exact path and exposed protocol
+18, zero elements and the correct dimensions with empty stderr. The launcher
+is useful for prepared templates but cannot guarantee native startup reliability
+or create dimensions. It does not kill other instances or retry automatically.
+See [CREATION_REVIEW.md](CREATION_REVIEW.md) and README for the accepted workflow.

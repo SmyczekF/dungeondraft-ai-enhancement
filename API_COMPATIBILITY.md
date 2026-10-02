@@ -123,8 +123,12 @@ and invokes `Global.Restart`, which reloads the scene after clearing editor/mod
 state. `Master._Ready` executes the pending request. With no map open the callback
 calls `Master.CreateNewMap` directly. The earlier bridge command bypassed the
 native reset path; this supports a state-related explanation for the duplicate
-toolbar error but is not a verified fix. A clean GDScript entry point and runtime
-acceptance are still required. See
+toolbar error but does not fix populated teardown. The tested private callback
+created 24x18 and 20x16 blank maps cleanly; a mixed populated replacement logged
+repeated `World.get_Level` / `Prop._ExitTree` exceptions and disposed
+`Toolset.Shrink`. It is rejected and removed. Startup opening of a prepared
+native template passed, with the previously observed intermittent Mono startup
+fatal also occurring on a preceding attempt. See
 [MAP_LIFECYCLE_INVESTIGATION.md](MAP_LIFECYCLE_INVESTIGATION.md).
 
 ## Save callback boundary follow-up

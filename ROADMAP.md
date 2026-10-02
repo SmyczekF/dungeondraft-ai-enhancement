@@ -73,19 +73,22 @@ call did not. See [MAP_LIFECYCLE_INVESTIGATION.md](MAP_LIFECYCLE_INVESTIGATION.m
 - [x] Inspect installed startup argument handling and native map creation/reset flow.
 - [x] Document standard stdio setup for other AI agents and require README coverage for future configuration changes.
 - [x] Verify GDScript lifecycle reachability: native reset/create methods are visible, but the pending managed request is neither an exposed property nor a registered Godot class. No clean pending-request entry point found.
-- [ ] Test the user-authorized **disposable prototype only** of the private New dialog callback; verify dimensions, reconnection and repeatability. Do not publish `create_map` based on prototype success alone.
-- [PLAN CHANGED] Suspend the temporary creation probe after the fresh-start native bounds crash; the probe was removed from the active mod directory. First verify manual creation with the committed bridge alone. The private callback was never dispatched, so its result remains unknown.
-- [ ] Assess external restart/open tools separately from blank-map creation. Reuse the existing Python MCP process and document any new configuration in the README.
+- [x] Test the disposable private New-dialog prototype: 24x18 and 20x16 blank creation, validation, reconnection, editing and saving passed with a clean console. Populated replacement functionally completed but raised native exceptions; see [CREATION_REVIEW.md](CREATION_REVIEW.md).
+- [REJECTED] Publish private New-dialog creation. Native `World.get_Level` / `Prop._ExitTree` cleanup and disposed `Toolset.Shrink` errors fail acceptance despite reconnection. Do not patch editor internals or pre-delete content to hide this failure.
+- [PLAN CHANGED] Resume after the clean baseline, complete the tests above, then remove the probe permanently from the active mod directory. Protocol 18 and the 45-tool production surface remain unchanged.
+- [x] Assess external startup separately: `scripts/Start-Dungeondraft.ps1` can copy and open a prepared native map, capture logs and refuse a second editor. Fresh 20x16 startup and bridge readiness passed; one preceding attempt hit the known intermittent Mono fatal. README documents the generic shell workflow; no new client configuration is required.
+- [REJECTED] Arbitrary blank dimensions through Windows startup arguments: the inspected application only handles an existing map path. Prepared templates keep their saved dimensions.
 
 - [x] Correct selection activation and native object undo/redo; focused rendered regression and the 15-check bridge runner passed.
 - [x] **[PLAN CHANGED]** Remove automatic post-save reopening, which can destroy native save UI widgets before their delayed callback completes. Keep JSON validation; reload verification is a separate step.
 - [x] Confirm the public native save signal, focused history/render regression and fresh 45-tool MCP client save pass; the user confirmed no new console errors. The one-argument `Editor.SaveMap(false)` route failed silently and was replaced by the published `saveButton` signal.
 - [ ] Correct `bridge_dirty` after a verified save by tracking the saved edit checkpoint independently of undo history. The native file saves correctly, but the current flag remains true until reload.
 
-Manual blank-map creation remains the supported workflow while these tests are
-pending. No Computer Use is authorized for this investigation. Ask the user
-before closing or launching applications; mod reloads needed for probes are
-performed manually by the user.
+Creation investigation is complete: prepare new sizes manually, or start a
+fresh editor with a copy of a prepared native template. Continue the roadmap
+after checking live readiness. The user now authorizes autonomous test launches,
+closing disposable test sessions, and Computer Use when needed for test setup.
+Map construction and discovery continue through the bridge.
 
 ## Phase 2 — Batch edits in the GDScript bridge
 
