@@ -1,5 +1,9 @@
 # Full map acceptance: island prisoner rescue
 
+**Appearance superseded:** the user rejected this first map despite its technical
+checks. See [VISUAL_MAP_REVIEW.md](VISUAL_MAP_REVIEW.md) for the revised map.
+The current verifier targets that revised bundle.
+
 Date: 2026-10-07. Package/mod 0.7.0, protocol 23, 60 MCP tools.
 Tested Windows Dungeondraft 1.2.0.1 / Godot 3.4.2 custom Mono, default artwork.
 This is an encounter workflow acceptance and focused regression pass, not an

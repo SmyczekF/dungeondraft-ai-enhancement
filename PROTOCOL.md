@@ -475,3 +475,17 @@ Native VTT coordinates and light ranges are tiles, not woxels or pixels.
   semantics need manual review rather than inference from the light-block flag.
 - PNG exports isolate the selected floor using public SetSourceLevel and wait
   for completion/restoration. This does not add multi-level Foundry export.
+
+## Visual correction (0.7.1, protocol 23)
+
+- `place_object` constructs through native Objects.LoadObject, initializing the
+  color shader when `color` is supplied. The wire color remains HTML RGB/RGBA.
+- `duplicate_object` copies native tint, mirror, shadow and layer with a new ID.
+- `modify_object` rejects `color` if the native tint is uninitialized, before
+  changing scale/rotation/layer. Create the prop with an explicit tint first.
+- `place_pattern.rotation` remains degrees; SetOptions receives radians.
+- Gable roofs require a ridge spanning the full building length. Width is half
+  the short dimension plus any eave; it does not expand the gable ends.
+
+No command/schema or protocol version changed. The corrected saved-map runner
+checks the revised island geometry/cages rather than the rejected first map.

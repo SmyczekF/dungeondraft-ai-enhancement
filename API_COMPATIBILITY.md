@@ -232,3 +232,19 @@ The production handler now rejects it before mutation; a fresh process with
 file argument passed six logged launches during island acceptance. Native PNG
 export isolates the current floor with SetSourceLevel and waits for restoration.
 See [FULL_MAP_REVIEW.md](FULL_MAP_REVIEW.md) for the scope and remaining gaps.
+
+## Visual correction — 0.7.1
+
+Public Objects.LoadObject initializes the custom-color shader and native search/ID
+registration. SetCustomColor alone cannot initialize a fresh prop. New colored
+props use native serialized vectors and hex colors; duplicates use Prop.Save(true)
+without node_id. Retinting an uninitialized prop rejects before edits; create
+it with a color. No direct Sprite mutation or existing-node Load workaround is used.
+
+Installed PatternShapes.AddPolygon converts UI degrees to radians before
+PatternShape.SetOptions. The bridge now does the same. Live degree-aligned floor
+grain, tinted placement/copy/history, save and fresh reload passed. Gable roof
+ridges need full building length; hip end geometry is distinct.
+
+See [VISUAL_MAP_REVIEW.md](VISUAL_MAP_REVIEW.md) for native log scope, appearance
+corrections, layers/routes and the remaining native startup/VTT gaps.

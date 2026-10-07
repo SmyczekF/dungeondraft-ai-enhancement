@@ -207,44 +207,40 @@
         "movement_cost": 1.0,
         "cover": "none",
         "blocks_movement": false,
-        "notes": "Rocky terrace +10 ft; access by southern ramp or climb east cliff."
+        "notes": "Natural coastal headland +5 ft, gentle inland slope, scattered weathered boulders; no rectangular gravel pad."
       },
       "type": "terrain_region",
       "region": [
         [
-          3.0,
-          10.0
+          9,
+          6.5
         ],
         [
-          5.0,
-          9.0
+          12,
+          7
         ],
         [
-          9.0,
-          9.5
+          18,
+          10.5
         ],
         [
-          10.0,
-          11.0
+          19.8,
+          12.8
         ],
         [
-          9.5,
-          14.0
+          16,
+          13.2
         ],
         [
-          7.0,
-          15.0
+          12,
+          11.8
         ],
         [
-          4.0,
-          14.5
-        ],
-        [
-          3.0,
-          12.0
+          9.8,
+          9.8
         ]
       ],
-      "material": "gravel"
+      "material": "grass"
     },
     {
       "id": "inland-road",
@@ -257,27 +253,31 @@
       "type": "road",
       "points": [
         [
-          4.0,
-          33.0
+          4,
+          33
         ],
         [
-          12.5,
-          28.5
+          12,
+          30.2
         ],
         [
-          15.0,
-          24.0
+          13.2,
+          27.6
         ],
         [
-          16.0,
-          20.0
+          15,
+          24
         ],
         [
-          19.0,
-          19.0
+          16,
+          20
+        ],
+        [
+          19,
+          19
         ]
       ],
-      "width": 2.2,
+      "width": 1.8,
       "material": "dirt",
       "smooth": true,
       "clearance": 0.25
@@ -341,7 +341,7 @@
         "movement_cost": 1.0,
         "cover": "none",
         "blocks_movement": false,
-        "notes": "Prisoner yard: multiple 10-foot routes around two pens."
+        "notes": "Prisoner yard with three freestanding metal cages; approach lanes remain clear."
       },
       "type": "clear_area",
       "region": [
@@ -370,37 +370,53 @@
         "movement_cost": 1.0,
         "cover": "none",
         "blocks_movement": false,
-        "notes": "Ground floor; stairs lead to the separately editable watch deck at +10 ft."
+        "notes": "Octagonal lookout support; upper deck +10 ft. Final manual stairs at [17.9,15], scale 0.85."
       },
       "type": "building",
       "region": [
         [
-          17.0,
-          13.0
+          21.171116901401525,
+          16.39930606605796
         ],
         [
-          21.0,
-          13.0
+          19.89930606605796,
+          17.671116901401525
         ],
         [
-          21.0,
-          18.0
+          18.10069393394204,
+          17.671116901401525
         ],
         [
-          17.0,
-          18.0
+          16.828883098598475,
+          16.39930606605796
+        ],
+        [
+          16.828883098598475,
+          14.60069393394204
+        ],
+        [
+          18.10069393394204,
+          13.328883098598476
+        ],
+        [
+          19.89930606605796,
+          13.328883098598476
+        ],
+        [
+          21.171116901401525,
+          14.60069393394204
         ]
       ],
       "doors": [
         {
           "position": [
-            19.0,
-            18.0
+            19,
+            17.671116901401525
           ],
           "width": 1.5
         }
       ],
-      "wall_asset": "res://textures/walls/wood_02.png",
+      "wall_asset": "res://textures/walls/wood_04.png",
       "floor_material": "dirt"
     },
     {
@@ -409,37 +425,45 @@
         "movement_cost": 1.0,
         "cover": "none",
         "blocks_movement": false,
-        "notes": ""
+        "notes": "Angled captain cabin with attached storage wing and veranda, timber raised above sand."
       },
       "type": "building",
       "region": [
         [
-          8.0,
-          18.0
+          7.63537662,
+          17.60389095
         ],
         [
-          13.0,
-          18.0
+          12.58671696,
+          18.29975645
         ],
         [
-          13.0,
-          23.0
+          12.12744573,
+          21.56764108
         ],
         [
-          8.0,
-          23.0
+          13.31576741,
+          21.7346488
+        ],
+        [
+          13.10700776,
+          23.2200509
+        ],
+        [
+          6.96734573,
+          22.35717768
         ]
       ],
       "doors": [
         {
           "position": [
-            13.0,
-            20.5
+            12.28053614,
+            20.4783462
           ],
           "width": 1.5
         }
       ],
-      "wall_asset": "res://textures/walls/wood_02.png",
+      "wall_asset": "res://textures/walls/wood.png",
       "floor_material": "dirt"
     },
     {
@@ -448,115 +472,37 @@
         "movement_cost": 1.0,
         "cover": "none",
         "blocks_movement": false,
-        "notes": ""
+        "notes": "Long communal bunkhouse, following the approach rather than the map grid."
       },
       "type": "building",
       "region": [
         [
-          6.0,
-          26.0
+          4.70224235,
+          27.16702524
         ],
         [
-          11.0,
-          26.0
+          11.54927556,
+          25.7116434
         ],
         [
-          11.0,
-          31.0
+          12.29775765,
+          29.23297476
         ],
         [
-          6.0,
-          31.0
+          5.45072444,
+          30.6883566
         ]
       ],
       "doors": [
         {
           "position": [
-            11.0,
-            28.5
+            11.9235166,
+            27.47230908
           ],
           "width": 1.5
         }
       ],
-      "wall_asset": "res://textures/walls/wood_02.png",
-      "floor_material": "dirt"
-    },
-    {
-      "id": "pen-west",
-      "gameplay": {
-        "movement_cost": 1.0,
-        "cover": "none",
-        "blocks_movement": false,
-        "notes": "10x15 ft prisoner pen; separate portcullis gate, locked until opened or broken."
-      },
-      "type": "room",
-      "region": [
-        [
-          16.0,
-          24.0
-        ],
-        [
-          18.0,
-          24.0
-        ],
-        [
-          18.0,
-          27.0
-        ],
-        [
-          16.0,
-          27.0
-        ]
-      ],
-      "doors": [
-        {
-          "position": [
-            17.0,
-            27.0
-          ],
-          "width": 1.0
-        }
-      ],
-      "wall_asset": "res://textures/walls/wood_04.png",
-      "floor_material": "dirt"
-    },
-    {
-      "id": "pen-east",
-      "gameplay": {
-        "movement_cost": 1.0,
-        "cover": "none",
-        "blocks_movement": false,
-        "notes": "10x15 ft prisoner pen; separate portcullis gate, locked until opened or broken."
-      },
-      "type": "room",
-      "region": [
-        [
-          20.0,
-          24.0
-        ],
-        [
-          22.0,
-          24.0
-        ],
-        [
-          22.0,
-          27.0
-        ],
-        [
-          20.0,
-          27.0
-        ]
-      ],
-      "doors": [
-        {
-          "position": [
-            21.0,
-            27.0
-          ],
-          "width": 1.0
-        }
-      ],
-      "wall_asset": "res://textures/walls/wood_04.png",
+      "wall_asset": "res://textures/walls/wood_03.png",
       "floor_material": "dirt"
     },
     {
@@ -649,6 +595,22 @@
           0.5
         ],
         [
+          9,
+          0.5
+        ],
+        [
+          9,
+          13.5
+        ],
+        [
+          20,
+          13.5
+        ],
+        [
+          20,
+          0.5
+        ],
+        [
           34.5,
           0.5
         ],
@@ -659,22 +621,6 @@
         [
           0.5,
           34.5
-        ],
-        [
-          0.5,
-          15.8
-        ],
-        [
-          11.5,
-          15.8
-        ],
-        [
-          11.5,
-          8.0
-        ],
-        [
-          0.5,
-          8.0
         ]
       ],
       "count": 24,
@@ -695,13 +641,13 @@
       },
       "type": "cover",
       "position": [
-        4.5,
-        12.5
+        11.6,
+        9.3
       ],
       "radius": 0.6,
-      "asset": "res://textures/objects/clutter/boulders/boulder_08.png",
-      "scale": 1.25,
-      "rotation": 20.0
+      "asset": "res://textures/objects/clutter/boulders/boulder_06.png",
+      "scale": 0.9,
+      "rotation": 30
     },
     {
       "id": "rock-east",
@@ -713,13 +659,13 @@
       },
       "type": "cover",
       "position": [
-        8.2,
-        12.0
+        17.3,
+        12
       ],
       "radius": 0.6,
-      "asset": "res://textures/objects/clutter/boulders/boulder_08.png",
-      "scale": 1.3,
-      "rotation": 20.0
+      "asset": "res://textures/objects/clutter/boulders/boulder_10.png",
+      "scale": 1.1,
+      "rotation": -20
     },
     {
       "id": "rock-coast",
@@ -738,6 +684,24 @@
       "asset": "res://textures/objects/clutter/boulders/boulder_08.png",
       "scale": 1.1,
       "rotation": 20.0
+    },
+    {
+      "id": "bunk-access",
+      "type": "road",
+      "points": [
+        [
+          11.9235166,
+          27.47230908
+        ],
+        [
+          13.2,
+          27.6
+        ]
+      ],
+      "width": 1.5,
+      "material": "dirt",
+      "smooth": false,
+      "clearance": 0.2
     }
   ],
   "encounter": {

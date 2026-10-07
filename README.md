@@ -31,8 +31,10 @@ forwards calls as JSON. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
 > lifecycle, inspection, creation, terrain, editing, levels,
 > selection, capture, camera, and undo.
 
-The 0.7.0 island-coast acceptance, two-floor review, fixes and remaining gaps
-are documented in [FULL_MAP_REVIEW.md](FULL_MAP_REVIEW.md). The core specification
+The 0.7.1 island visual revision, varied building footprints, exposed cages,
+rendering fixes and fresh-launch checks are documented in
+[VISUAL_MAP_REVIEW.md](VISUAL_MAP_REVIEW.md). The earlier technical acceptance
+is retained in [FULL_MAP_REVIEW.md](FULL_MAP_REVIEW.md). The core specification
 is [examples/island-rescue.json](examples/island-rescue.json); it generates the
 terrain, coast, village outlines and palms. Furnishing and the upper floor are
 additional low-level edits, not implied by that example.

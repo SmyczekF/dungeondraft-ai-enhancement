@@ -13,7 +13,7 @@ from pathlib import Path
 
 from mcp import StdioServerParameters
 from mcp.client import Client
-from shapely.geometry import Point, box
+from shapely.geometry import Point, Polygon, box
 from shapely.ops import unary_union
 
 
@@ -61,22 +61,23 @@ async def verify(project: Path, output: Path):
         status = await call("get_status")
         assert status["level_id"] == ground["id"]
         assert status["counts"] == dict(
-            objects=56,
-            walls=10,
+            objects=76,
+            walls=6,
             lights=1,
-            paths=7,
-            portals=5,
+            paths=3,
+            portals=3,
             roofs=0,
-            patterns=4,
+            patterns=5,
             texts=0,
         ), status
         patterns = (await call("list_elements", kind="patterns", limit=200))["elements"]
-        assert sorted(p["layer"] for p in patterns) == [-100, -100, -100, 100]
+        assert sorted(p["layer"] for p in patterns) == [-100, -100, -100, -100, 100]
         objects = (await call("list_elements", kind="objects", limit=200))["elements"]
         assert {p["layer"] for p in objects} == {0, 20, 200}
         assert sum("palm" in p.get("asset", "") for p in objects) == 24
         portals = (await call("list_elements", kind="portals", limit=200))["elements"]
-        assert sorted(p["closed"] for p in portals) == [False, False, False, True, True]
+        assert sorted(p["closed"] for p in portals) == [False, False, False]
+        assert sum("/cages/" in p.get("asset", "") or "hanging_cage" in p.get("asset", "") for p in objects) == 3
         await call("set_camera", x=4480, y=4480, zoom=8)
         await capture("ground.png", "export_map", ppi=96)
         await call("render_preview", plan_id=plan_id, max_pixels=2048)
@@ -122,17 +123,14 @@ async def verify(project: Path, output: Path):
             for e in objects
             if "/stairs/" not in e["asset"] and "flag_stand" not in e["asset"]
         ]
-        platform = unary_union(
-            [
-                box(17, 13, 21, 13.7),
-                box(18.4, 13.7, 21, 15.7),
-                box(17, 15.7, 21, 18),
-                box(17, 13.7, 17.4, 15.7),
-            ]
+        spec = json.loads((project / "spec.json").read_text(encoding="utf-8"))
+        tower = next(f for f in spec["features"] if f["id"] == "watchtower")
+        platform = Polygon(tower["region"]).buffer(-0.08, join_style="mitre").difference(
+            box(17.475, 14.15, 18.325, 15.85)
         )
         free = platform.buffer(-0.4).difference(unary_union(cover).buffer(0.4))
         components = [free] if free.geom_type == "Polygon" else list(free.geoms)
-        routes = [[(19, 15.7), (19.2, 14.9)], [(19, 15.7), (19.2, 17)]]
+        routes = [[(19, 15.8), (19.2, 14.5)], [(19, 15.8), (19.3, 16.7)]]
         report["upper_routes"] = [
             any(c.covers(Point(a)) and c.covers(Point(b)) for c in components)
             for a, b in routes

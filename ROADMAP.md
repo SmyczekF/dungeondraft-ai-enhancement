@@ -214,3 +214,21 @@ The initial proof was **MCP generation of the ten-tree path sample on a manually
 See [FULL_MAP_REVIEW.md](FULL_MAP_REVIEW.md). This acceptance covers the map's
 workflow and focused regressions; it is not a claim that every low-level tool
 and every asset pack were retested.
+
+## Island appearance revision — 2026-10-07
+
+The first encounter passed technical acceptance but was rejected in user visual
+review. Its repetitive cabins, boxed prison pens and isolated rock pad required
+replacement. Technical connectivity does not establish visual acceptance.
+
+- [x] Replace buildings with rotated longhouse, cabin with wing/porch and octagonal lookout.
+- [x] Use three exposed metal cages and integrate rock clutter into the coast.
+- [x] Fix native prop tint initialization, duplicate tint persistence and degree/radian floor grain.
+- [x] Retain drawing layers and independent upper floor; create a separate roofed overview.
+- [x] Review native renders and verify six routes/layers/cages after fresh save/relaunch.
+- [x] Update core example, portable verifier and documentation; retain original map for comparison.
+- [PLAN CHANGED] Retinting a prop without an initialized native shader rejects;
+  place it with an explicit color. Avoid undocumented Sprite mutation or conflicting IDs.
+
+[VISUAL_MAP_REVIEW.md](VISUAL_MAP_REVIEW.md) records the reviewable revision and
+verification limits. Final user appearance approval remains separate.

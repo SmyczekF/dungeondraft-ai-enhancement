@@ -489,14 +489,13 @@ def add_roof(
     IMPORTANT: `points` is the roof's ridge (the peak line), NOT a footprint to
     trace. DD builds a complete, self-closing roof that slopes down `width`
     woxels perpendicular to each side of the ridge, with hips/gables off the
-    ridge ends. The footprint covered = the ridge's bounding box expanded by
-    `width` on every side.
+    ridge ends. The ridge and roof type determine end coverage; width sets side slopes.
 
-    To roof a building W x H: put the ridge along the LONG axis, centered, and
-    set width = half the SHORT dimension so the eaves reach the side walls. The
-    ridge should be shorter than the long wall by ~width at each end (so the end
-    hips land on the short walls). Two points that are close together give a
-    near-pyramid (a square hip roof).
+    For a gable (type=0), span the building's full LONG axis with the ridge,
+    centered, and set width to half the SHORT dimension, allowing small eaves.
+    Gable ends do not extend a short ridge to reach the building ends.
+    Hip roofs (type=1) have different end geometry: inspect the rendered result
+    rather than treating width as an axis-aligned bounding-box expansion.
 
     asset: a Roofs asset path (list_assets('Roofs')). type: 0=gable, 1=hip,
     2=dormer. Roofs render above everything (z 800). Undoable as a create.
@@ -790,7 +789,10 @@ def modify_object(
     shadow: Optional[bool] = None,
     layer: Optional[int] = None,
 ) -> dict:
-    """Modify an existing object's scale, rotation (degrees), color ('#rrggbb') shadow flag and native layer (-1000..1000) by id. Layer changes preserve selection indexing and undo/redo."""
+    """Modify object scale, rotation (degrees), shadow and layer (-1000..1000).
+
+    Retinting requires an object created with an explicit color (initialized native shader).
+    Layer changes preserve selection indexing and undo/redo."""
     params: dict = {"id": id}
     if asset is not None:
         params["asset"] = asset

@@ -438,8 +438,8 @@ func _snapshot(node) -> Dictionary:
 		s["scale"] = node.scale
 	if node.get("HasShadow") != null:
 		s["shadow"] = node.get("HasShadow")
-	if node.get("customColor") != null:
-		s["color"] = node.get("customColor")
+	if node.has_method("HasCustomColor") and node.HasCustomColor():
+		s["color"] = node.GetCustomColor()
 	if node.get_parent() == Global.World.GetCurrentLevel().Objects:
 		s["object_layer"] = node.z_index
 	return s
@@ -997,17 +997,27 @@ func _place_object(req : Dictionary) -> Dictionary:
 	if tex == null: return _err("could not load object asset: " + str(req.get("asset")))
 	if not _batch_integer(req.get("layer", 0), -1000, 1000):
 		return _err("object layer must be an integer in -1000..1000")
-	var prop = level.Objects.CreateObject(int(req.get("sorting", 0)))
-	prop.z_index = int(req.get("layer", 0))
-	prop.SetTexture(tex)
-	prop.position = _xy(req, Global.World.WoxelDimensions * 0.5)
-	var s = float(req.get("scale", 1.0))
-	prop.scale = Vector2(s, s)
-	prop.rotation = deg2rad(float(req.get("rotation", 0.0)))
-	if req.has("color") and prop.has_method("SetCustomColor"):
-		prop.SetCustomColor(_color(req["color"], Color(1, 1, 1)))
-	prop.set_meta("preview", false)
-	level.Objects.AddToSearchTable(prop, int(req.get("sorting", 0)) == 1)
+	var sorting = int(req.get("sorting", 0))
+	var scale_value = float(req.get("scale", 1.0))
+	# LoadObject initializes native shader materials, search registration and IDs.
+	# SetCustomColor alone cannot initialize a newly created prop's shader.
+	# DictionaryEx.Read expects Godot's serialized Vector2 and hexadecimal color.
+	var data := {
+		"texture": tex.resource_path,
+		"position": var2str(_xy(req, Global.World.WoxelDimensions * 0.5)),
+		"scale": var2str(Vector2(scale_value, scale_value)),
+		"rotation": deg2rad(float(req.get("rotation", 0.0))),
+		"layer": int(req.get("layer", 0)),
+		"shadow": true,
+	}
+	if req.has("color"):
+		data["custom_color"] = _color(req["color"], Color(1, 1, 1)).to_html(true)
+	var prop = level.Objects.LoadObject(data)
+	if prop == null: return _err("LoadObject returned null")
+	if sorting == 1:
+		level.Objects.RemoveFromSearchTable(prop)
+		level.Objects.move_child(prop, 0)
+		level.Objects.AddToSearchTable(prop, true)
 	return _ok({ "id": _id(prop), "position": _vec(prop.position) })
 
 
@@ -1242,8 +1252,8 @@ func _place_pattern(req : Dictionary) -> Dictionary:
 	else:
 		return _err("provide 'rect':[x,y,w,h] or 'points':[[x,y]...]")
 
-	# DrawRect/DrawPolygon create the shape but don't apply the texture, so set
-	# it on the new shape directly via SetOptions(texture, color, rotation).
+	# Apply the resolved texture/tint directly. Native SetOptions uses radians;
+	# the MCP API and PatternShapeTool rotation control use degrees.
 	#
 	# Native Save() serializes GetLayer() (the parent layer), not shape.z_index.
 	# SetLayer uses GetOrMakeLayer and preserves the actual editable layer.
@@ -1258,7 +1268,7 @@ func _place_pattern(req : Dictionary) -> Dictionary:
 	if all.size() > before and all.size() > 0:
 		var shape = all[all.size() - 1]
 		if shape.has_method("SetOptions"):
-			shape.SetOptions(tex, color, rotation)
+			shape.SetOptions(tex, color, deg2rad(rotation))
 		shape.SetLayer(int(req.get("z", -100)))
 		shape.z_as_relative = true
 		shape.z_index = 0
@@ -1698,6 +1708,9 @@ func _move_element(req : Dictionary) -> Dictionary:
 func _modify_object(req : Dictionary) -> Dictionary:
 	var node = _resolve(req)
 	if node == null: return _err("no element with id " + str(req.get("id")))
+	# A native tint setter only updates an existing shader; reject before any edit.
+	if req.has("color") and (not node.has_method("HasCustomColor") or not node.HasCustomColor()):
+		return _err("object tint is not initialized; create the object with an explicit color")
 	if req.has("layer"):
 		if node.get_parent() != Global.World.GetCurrentLevel().Objects or not _batch_integer(req["layer"], -1000, 1000):
 			return _err("layer requires a current-level object and an integer in -1000..1000")
@@ -1725,15 +1738,14 @@ func _duplicate_object(req : Dictionary) -> Dictionary:
 	if level == null: return _err("no map open")
 	var src = _resolve(req)
 	if src == null: return _err("no element with id " + str(req.get("id")))
+	if src.get_parent() != level.Objects: return _err("duplicate requires a current-level object")
 	if src.get("Texture") == null: return _err("element has no Texture to duplicate")
-	var prop = level.Objects.CreateObject(0)
-	prop.SetTexture(src.Texture)
-	prop.position = src.position + Vector2(float(req.get("dx", 64.0)), float(req.get("dy", 0.0)))
-	prop.z_index = src.z_index
-	prop.scale = src.scale
-	prop.rotation = src.rotation
-	prop.set_meta("preview", false)
-	level.Objects.AddToSearchTable(prop, false)
+	# Native copy serialization preserves tint/shader, shadow, mirror and layer.
+	# copy=true omits node_id so the duplicate receives its own identity.
+	var data = src.Save(true)
+	data["position"] = var2str(src.position + Vector2(float(req.get("dx", 64.0)), float(req.get("dy", 0.0))))
+	var prop = level.Objects.LoadObject(data)
+	if prop == null: return _err("LoadObject returned null")
 	return _ok({ "id": _id(prop), "position": _vec(prop.position) })
 
 

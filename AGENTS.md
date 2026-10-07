@@ -121,3 +121,15 @@ If you change code (not just drive the map), the two halves reload differently:
   `.github/workflows/gdscript.yml` CI check runs the same parser on pushes and
   pull requests that change GDScript. That syntax parser does not validate
   Godot's global constants; `TYPE_VECTOR2_ARRAY` is the Godot 3 name.
+
+## Map appearance checks
+
+- A tile represents 5 ft for the island encounter. Choose functional building
+  dimensions and furniture spacing, then review native images; route validity
+  alone does not prove good artwork. Vary footprints/orientation where appropriate.
+- Use exposed cage artwork for prisoner cages, with explicit gameplay notes;
+  avoid inventing prison rooms. Blend rough ground into neighboring terrain.
+- `place_object(color=...)` initializes the native tint shader. Retinting with
+  `modify_object` requires initialized tint; an uninitialized prop rejects.
+- Pattern rotation is in degrees. A gable roof needs a ridge spanning the
+  building length; width determines the side slopes, not the gable end coverage.
