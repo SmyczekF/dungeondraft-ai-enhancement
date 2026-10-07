@@ -161,7 +161,7 @@ def foundry_scene(native, plan, manifest, ppi, destination):
                 # Eight edges around the declared trunk/obstacle radius.
                 boundary = Point(item["position"]).buffer(radius, quad_segs=2).boundary
                 segments(boundary, item["semantic_id"], movement_only=True)
-        if semantic["type"] == "stream" and semantic["spec"]["depth"] == "deep":
+        if semantic["type"] in ("stream", "water_region") and semantic["spec"]["depth"] == "deep":
             boundary = shape(semantic["geometry"]).difference(crossings).boundary
             parts = (
                 [boundary]

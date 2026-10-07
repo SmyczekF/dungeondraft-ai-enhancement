@@ -210,3 +210,25 @@ Corrected ordering passed native wall/portal/light export and a fresh editor
 restart with empty stderr. Native VTT 0.3 uses tile-coordinate LOS/portal/light
 positions, ARGB color strings and tile light radii. See PHASE5_REVIEW.md for
 Foundry 14 mapping and the explicit pending target-runtime review.
+
+## Island layers and floor identity (2026-10-07)
+
+Package 0.7.0 retains protocol 23 and 60 MCP tools. Public
+[PatternShape.SetLayer](https://megasploot.github.io/DungeondraftModdingAPI/reference/PatternShape/)
+sets the persistent parent layer; native Save uses GetLayer, so temporary
+z offsets were insufficient. Public Objects RemoveFromSearchTable/AddToSearchTable
+must bracket object ZIndex changes to keep native layer buckets consistent.
+
+Installed metadata/IL and live checks confirm World.CreateLevel inserts at
+index 0 while keeping the old floor active. World.CurrentLevelId is an index;
+Level.ID is a separate session identity. Load regenerates IDs in file order.
+[World.SetLevel](https://megasploot.github.io/DungeondraftModdingAPI/reference/World/)
+requires an explicit second `false` argument through the managed GDScript bridge.
+[Editor.UpdateLevelOptions / SetLevelOptionsByID](https://megasploot.github.io/DungeondraftModdingAPI/reference/Editor/)
+refresh and synchronize the native floor selector.
+
+A populated ForceOpenMap replacement reproduced native Prop._ExitTree errors.
+The production handler now rejects it before mutation; a fresh process with
+file argument passed six logged launches during island acceptance. Native PNG
+export isolates the current floor with SetSourceLevel and waits for restoration.
+See [FULL_MAP_REVIEW.md](FULL_MAP_REVIEW.md) for the scope and remaining gaps.

@@ -539,6 +539,54 @@
       "title": "TerrainRegion",
       "type": "object"
     },
+    "WaterRegion": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "gameplay": {
+          "$ref": "#/$defs/Gameplay"
+        },
+        "type": {
+          "const": "water_region",
+          "title": "Type",
+          "type": "string"
+        },
+        "region": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "maxItems": 24,
+          "minItems": 3,
+          "title": "Region",
+          "type": "array"
+        },
+        "depth": {
+          "default": "deep",
+          "enum": [
+            "shallow",
+            "deep"
+          ],
+          "title": "Depth",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "region"
+      ],
+      "title": "WaterRegion",
+      "type": "object"
+    },
     "Zone": {
       "additionalProperties": false,
       "properties": {
@@ -652,7 +700,8 @@
             "room": "#/$defs/Building",
             "spawn": "#/$defs/Zone",
             "stream": "#/$defs/Stream",
-            "terrain_region": "#/$defs/TerrainRegion"
+            "terrain_region": "#/$defs/TerrainRegion",
+            "water_region": "#/$defs/WaterRegion"
           },
           "propertyName": "type"
         },
@@ -662,6 +711,9 @@
           },
           {
             "$ref": "#/$defs/Stream"
+          },
+          {
+            "$ref": "#/$defs/WaterRegion"
           },
           {
             "$ref": "#/$defs/TerrainRegion"

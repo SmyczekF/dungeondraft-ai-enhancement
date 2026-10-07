@@ -83,7 +83,7 @@ def revised_spec(plan, replacements):
             raise BridgeError("revision must preserve feature type")
         if old["type"] not in PROPS | SURFACES | {"entry", "spawn", "clear_area"}:
             raise BridgeError(
-                "stream/building revision is not supported: their native shared geometry needs separate ownership verification"
+                "water/building revision is not supported: their native shared geometry needs separate ownership verification"
             )
         raw["features"][indexed[fid]] = replacement
         seen.add(fid)

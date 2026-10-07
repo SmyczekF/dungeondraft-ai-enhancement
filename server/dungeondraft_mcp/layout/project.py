@@ -155,6 +155,18 @@ def save_project(planner, plan_id, directory):
     }
 
 
+def restored_level_id(native, floors):
+    """Match the saved active floor before rebinding session-local native IDs."""
+    index = native["header"]["editor_state"]["current_level"]
+    if type(index) is not int or index < 0 or index >= len(floors["levels"]):
+        raise BridgeError("project's saved floor is unavailable")
+    saved = native["world"]["levels"][str(index)]
+    current = floors["levels"][index]
+    if floors["current_index"] != index or current["label"] != saved["label"]:
+        raise BridgeError("select the project's saved floor before restoring ownership")
+    return current["id"]
+
+
 def load_project(planner, directory):
     root = Path(directory)
     if not root.is_absolute():
@@ -208,6 +220,13 @@ def load_project(planner, directory):
         raise BridgeError(
             "open this project's native map before loading its planning data"
         )
+    # Dungeondraft regenerates Level.ID in file order on loading. It remains
+    # stable only within a session; the verified native file identifies its floor.
+    native = json.loads((root / "map.dungeondraft_map").read_text(encoding="utf-8"))
+    manifest["level_id"] = restored_level_id(
+        native, planner.bridge.request("list_levels")
+    )
+    ownership["surface"]["level_id"] = manifest["level_id"]
     from .validation import validate
 
     report = validate(plan, manifest, context, ownership["surface"])

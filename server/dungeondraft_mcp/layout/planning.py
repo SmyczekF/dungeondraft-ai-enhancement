@@ -8,6 +8,8 @@ from ..bridge_client import BridgeError
 from .spec import MapSpec, Forest, Prop, Road, TerrainRegion, Building
 from .layout import generate, digest, LayoutError, WOXELS_PER_TILE
 
+from .validation import is_manual_obstacle
+
 MAX_PLANS = 64
 KINDS = ("objects", "walls", "lights", "paths", "portals", "roofs", "patterns", "texts")
 
@@ -168,7 +170,7 @@ class Planner:
             }
         manual = water_bounds(context["content"]["water"])
         for e in context["content"]["elements"]:
-            if e.get("kind") in ("light", "text"):
+            if not is_manual_obstacle(e):
                 continue
             if e.get("bounds"):
                 a, b = e["bounds"]
@@ -425,10 +427,7 @@ class Planner:
             ids = {e["id"] for _, e in owned_elements(record["manifest"])}
             manual = []
             for descriptor in context["content"]["elements"]:
-                if descriptor["id"] not in ids and descriptor.get("kind") not in (
-                    "light",
-                    "text",
-                ):
+                if descriptor["id"] not in ids and is_manual_obstacle(descriptor):
                     if not descriptor.get("bounds"):
                         raise BridgeError(
                             "manual element lacks bounds; cannot revise safely"
@@ -450,7 +449,7 @@ class Planner:
                     "errors": [{"feature_id": exc.feature_id, "message": str(exc)}],
                 }
             for fid, semantic in record["plan"]["features"].items():
-                if semantic["type"] in ("building", "room", "stream") and digest(
+                if semantic["type"] in ("building", "room", "stream", "water_region") and digest(
                     semantic
                 ) != digest(plan["features"][fid]):
                     raise BridgeError(

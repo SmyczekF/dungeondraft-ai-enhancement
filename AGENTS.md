@@ -14,7 +14,7 @@ The tools talk to a live Dungeondraft, not this repo. They only work when:
 2. **a map is open**. Dungeondraft loads tool mods only after a map loads, so a
    map must load after starting the app. Create new blank dimensions manually,
    or start an existing native template with the external launcher. The bridge
-   can reopen saved maps.
+   can open saved maps from an empty current map.
 
 If both aren't true, calls fail (connection refused, or `"no map open"`).
 **Verify first:** call `ping` (expect `pong` + protocol version 23), then
@@ -35,7 +35,7 @@ blindly.
   bundle native map and restore ownership with `load_battlemap_project`.
 - `revise_battlemap` accepts complete named feature replacements; default dry
   run returns the diff. Retain the new plan ID. Manual terrain changes cause
-  ownership conflicts. Stream/building shared geometry is currently excluded.
+  ownership conflicts. Water/building shared geometry is currently excluded.
 - Exports are bounded to 16 megapixels / 8192 pixels per side. Wait for native
   export completion before editing; VTT exports restore grid, lighting and camera.
 
@@ -56,6 +56,14 @@ blindly.
 
 - Coordinates are **woxel** (world-pixel) space; get `map_center` from
   `get_status`. There are 256 woxels per tile.
+- Drawing layers are distinct from native floors. Objects use `layer` in
+  -1000..1000; pattern `z` sets its persistent native parent layer. Put room
+  floors below objects and pier cargo above its deck. `add_level` inserts a blank
+  floor at index 0, keeping the previous floor active; use its returned index
+  with `set_level`. `level_id` is the native ID, `level_index` is the list index.
+  IDs are stable during a session but regenerated on file load. Project loading
+  matches the saved floor and checks geometry before adopting its new ID.
+  Undo/redo on another floor is rejected; return to the edit's original floor.
 - Every element has an integer `id`; create calls return it, `list_elements` /
   `get_element` report it. Feed ids back into move/modify/delete.
 - Discover assets with `list_assets` or `list_asset_metadata` (category,
@@ -63,10 +71,13 @@ blindly.
 - Use `get_capabilities` before planning edits. It reports commands, the live
   Godot engine version, active mods and catalog version. `refresh_asset_catalog`
   rebuilds the cache after asset packs change.
-- `open_map` replaces the current map only with `discard_current=true`. Save
-  first if needed. `save_map` validates the written native JSON and preserves
-  bridge undo history. Reopen separately after the save notification disappears;
-  immediate reopening can leave native save UI callbacks pointing at freed widgets.
+- `open_map` requires an empty current map across every floor and
+  `discard_current=true`. Populated replacement raises native cleanup exceptions
+  on 1.2.0.1 and is rejected. Save and restart using the external launcher for
+  a populated map. `save_map` validates the written native JSON and preserves
+  bridge undo history. For an empty-map reopen, wait until the save notification
+  disappears; immediate reopening can leave native callbacks pointing at freed
+  widgets.
   `bridge_dirty` compares bridge edit state with the last verified MCP save.
   Undo/redo preserves the save checkpoint; non-recorded edits stay conservatively
   dirty until saved. UI saving alone does not confirm a bridge checkpoint.

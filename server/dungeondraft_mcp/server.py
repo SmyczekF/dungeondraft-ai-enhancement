@@ -143,7 +143,11 @@ def get_capabilities() -> dict:
 
 @mcp.tool()
 def open_map(path: str, discard_current: bool = False) -> dict:
-    """Open an existing native map. Explicitly allow replacement of an open map."""
+    """Open a native map from an empty current map with discard_current=true.
+
+    Populated replacement is rejected; save and restart the editor with the
+    target file through the external launcher to avoid native cleanup errors.
+    """
     target = _native_path(path, must_exist=True)
     previous_instance = bridge.request("get_map_info")["bridge_instance"]
     bridge.request("open_map", path=str(target), discard_current=discard_current)
@@ -345,14 +349,16 @@ def place_object(
     rotation: float = 0.0,
     sorting: int = 0,
     color: str = "",
+    layer: int = 0,
 ) -> dict:
     """Place an object (prop) on the current map. Returns the new element id.
 
     asset: an Objects asset path from list_assets(category='Objects').
     x, y: woxel coordinates; defaults to map center. rotation: degrees.
-    sorting: 0=over, 1=under. color: optional tint as '#rrggbb'.
+    layer: native object ZIndex in -1000..1000; higher renders above lower.
+    sorting: 0=over, 1=under within its layer. color: optional tint as '#rrggbb'.
     """
-    params = {"asset": asset, "scale": scale, "rotation": rotation, "sorting": sorting}
+    params = {"asset": asset, "scale": scale, "rotation": rotation, "sorting": sorting, "layer": layer}
     if x is not None:
         params["x"] = x
     if y is not None:
@@ -782,8 +788,9 @@ def modify_object(
     rotation: Optional[float] = None,
     color: str = "",
     shadow: Optional[bool] = None,
+    layer: Optional[int] = None,
 ) -> dict:
-    """Modify an existing object's scale, rotation (degrees), color ('#rrggbb') and/or shadow flag by id."""
+    """Modify an existing object's scale, rotation (degrees), color ('#rrggbb') shadow flag and native layer (-1000..1000) by id. Layer changes preserve selection indexing and undo/redo."""
     params: dict = {"id": id}
     if asset is not None:
         params["asset"] = asset
@@ -795,6 +802,8 @@ def modify_object(
         params["color"] = color
     if shadow is not None:
         params["shadow"] = shadow
+    if layer is not None:
+        params["layer"] = layer
     return bridge.request("modify_object", **params)
 
 
@@ -816,7 +825,11 @@ def delete_element(id: int) -> dict:
 
 @mcp.tool()
 def add_level(label: str = "Level") -> dict:
-    """Add a new level (floor) to the map. Returns its id and label."""
+    """Insert a blank floor at index zero; return index, native id and label.
+
+    The previous floor remains active. Use the returned index with set_level.
+    Native floor IDs are session-local and reassigned when a file is loaded.
+    """
     return bridge.request("add_level", label=label)
 
 
@@ -854,7 +867,13 @@ def export_map(ppi: int = 40) -> Image:
         pass
     bridge.request("export_map", path=_EXPORT_PATH, ppi=ppi)
     _wait_for_file(_EXPORT_PATH)
-    return Image(path=_EXPORT_PATH)
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        status = bridge.request("get_export_status")
+        if not status["exporting"] and not status["managed_export"]:
+            return Image(path=_EXPORT_PATH)
+        time.sleep(0.1)
+    raise BridgeError("native export did not finish restoring editor state")
 
 
 # --------------------------------------------------------------------------
@@ -987,7 +1006,7 @@ def revise_battlemap(plan_id: str, features: list[dict], dry_run: bool = True) -
     Unselected forests keep their positions. Include forests explicitly when
     changing a road would invalidate their clearances. Shared terrain is rebuilt
     only while its ownership checksum is unchanged; manual objects are preserved.
-    Stream/building geometry revision is not supported. Default dry_run edits
+    Water/building geometry revision is not supported. Default dry_run edits
     nothing; repeat identical features with dry_run=False to apply/retry safely.
     """
     return planner.revise(plan_id, features, dry_run)

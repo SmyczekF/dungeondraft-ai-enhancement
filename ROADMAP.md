@@ -192,3 +192,25 @@ excluded from this file milestone.
 ## First implementation slice
 
 The initial proof was **MCP generation of the ten-tree path sample on a manually created blank map**. Phase 1 provides save/reopen and inspection; Phase 2 adds bounded native batching. The `phase1_smoke.py` runner verifies native save/reopen, exact tree IDs/assets, pagination, and PNG export before Phase 1 is accepted.
+
+## Full encounter acceptance — island coast (2026-10-07)
+
+- [x] Build and visually iterate a 35x35 coastal prisoner-rescue encounter at
+  5 ft per tile, with palms, pirate huts, closed prisoner pens, cover, difficult
+  sand, raised rock terrace, pier and escape boats.
+- [x] Add polygon coast/lake water regions while preserving water under decks.
+- [x] Verify persistent object/pattern layers and an independent native tower floor.
+- [x] Fix floor switching, session IDs versus indices, cross-floor history and
+  saved-project ownership restoration after regenerated native floor IDs.
+- [x] Check all required ground routes, upper deck circulation, native save/reload,
+  previews, layer persistence, batch replay, and ground-only VTT file output.
+- [x] Commit a core example and a portable saved-project acceptance runner.
+- [PLAN CHANGED] Populated in-process open is rejected after reproducing native
+  teardown errors. Save and start a fresh editor using the external launcher.
+- [PLAN CHANGED] Full multi-floor generation and Foundry transfer remain outside
+  map_spec.v1. Independent native floors and per-floor PNGs work; VTT export is
+  single-level, and target Foundry 14 runtime import remains unverified.
+
+See [FULL_MAP_REVIEW.md](FULL_MAP_REVIEW.md). This acceptance covers the map's
+workflow and focused regressions; it is not a claim that every low-level tool
+and every asset pack were retested.

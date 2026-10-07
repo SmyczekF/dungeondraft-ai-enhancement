@@ -46,6 +46,12 @@ class Stream(Feature):
     depth: Literal["shallow", "deep"] = "shallow"
 
 
+class WaterRegion(Feature):
+    type: Literal["water_region"]
+    region: Polygon
+    depth: Literal["shallow", "deep"] = "deep"
+
+
 class TerrainRegion(Feature):
     type: Literal["terrain_region"]
     region: Polygon
@@ -110,7 +116,7 @@ class Encounter(Closed):
 
 
 FeatureSpec = Annotated[
-    Union[Road, Stream, TerrainRegion, Forest, Prop, ClearArea, Zone, Building],
+    Union[Road, Stream, WaterRegion, TerrainRegion, Forest, Prop, ClearArea, Zone, Building],
     Field(discriminator="type"),
 ]
 

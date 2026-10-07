@@ -5,6 +5,18 @@ from shapely.geometry import Point, box, shape, LineString
 from shapely.ops import unary_union
 
 
+def is_manual_obstacle(descriptor):
+    """Walkable floors and explicitly open portals do not obstruct routes.
+
+    Unknown portal state remains conservative. Native Closed is mapped to
+    ordinary door state, as in VTT export; windows require manual review.
+    """
+    return descriptor.get("kind") not in ("light", "text", "pattern") and not (
+        descriptor.get("kind") in ("portal", "wall_portal")
+        and descriptor.get("closed") is False
+    )
+
+
 def owned_elements(manifest):
     return [
         (fid, e)
@@ -129,11 +141,11 @@ def validate(plan, manifest, context, surface=None):
             continue
         g = shape(geometry)
         kind = semantic["type"]
-        if kind in ("road", "stream", "entry", "spawn", "clear_area"):
+        if kind in ("road", "stream", "water_region", "entry", "spawn", "clear_area"):
             protected.append(
                 g.buffer(semantic["spec"].get("clearance", 0)) if kind == "road" else g
             )
-        if kind == "stream" and semantic["spec"]["depth"] == "deep":
+        if kind in ("stream", "water_region") and semantic["spec"]["depth"] == "deep":
             crossings = unary_union(
                 [
                     shape(s["geometry"])
@@ -174,7 +186,7 @@ def validate(plan, manifest, context, surface=None):
     for ident, descriptor in live.items():
         if (
             ident not in owned
-            and descriptor.get("kind") not in ("light", "text")
+            and is_manual_obstacle(descriptor)
             and descriptor.get("bounds")
         ):
             a, b = descriptor["bounds"]
@@ -248,5 +260,5 @@ def validate(plan, manifest, context, surface=None):
             "status": "required",
             "checks": ["clipping", "readability", "artwork suitability"],
         },
-        "manual_geometry_policy": "unowned element bounds except lights/text are conservative obstacles",
+        "manual_geometry_policy": "unowned element bounds except lights/text/pattern floors/explicitly open portals are conservative obstacles",
     }

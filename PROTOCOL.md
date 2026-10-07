@@ -108,12 +108,12 @@ also passed live testing. A bind failure caused by another process is logged
 without a modal alert. The Python
 `open_map` tool waits for a new `bridge_instance` and verifies the path. The Python
 `save_map` waits for parseable native JSON without replacing the scene.
-To check native reload durability, call `open_map` separately after the save
-notification disappears and compare IDs/assets/counts. Immediate reopening
-can destroy widgets still referenced by Dungeondraft's delayed save callback.
-Automatic reopen and its `verify_reopen` parameter were removed rather than
-adding a hardcoded delay or depending on private UI fields. Reopen clears
-bridge undo history.
+`open_map` requires no elements on any current floor. A populated-map switch
+is rejected before history or listener changes because the native cleanup can
+throw even when the new scene appears. Verify populated reload durability by
+saving and starting a fresh editor with the native file argument. Empty-map
+reopening still clears bridge history. Wait for export/save completion before
+changing scenes; native callbacks can refer to widgets in the old scene.
 Use `discard_current=true` only after saving any work to retain. `dirty`
 combines Dungeondraft's editor flag with edits tracked by the bridge.
 `bridge_dirty` compares the current undo branch and non-recorded edit revision
@@ -136,7 +136,7 @@ native exceptions. This is separate from the fixed bridge listener conflict.
 
 | cmd | params |
 | --- | --- |
-| `place_object` | `asset`, `x?`, `y?`, `scale=1`, `rotation=0`, `sorting=0`, `color?` |
+| `place_object` | `asset`, `x?`, `y?`, `scale=1`, `rotation=0`, `sorting=0`, `layer=0`, `color?` |
 | `draw_wall` | `points[[x,y]...]`, `asset?`, `loop=false`, `shadow=true`, `type=0`, `joint=1`, `color?` |
 | `draw_path` | `points[[x,y]...]`, `asset`, `layer=0`, `sorting=0`, `smoothness?`, `width?` |
 | `add_light` | `x?`, `y?`, `color?`, `energy=1`, `range=1`, `shadows=true`, `asset?` |
@@ -168,11 +168,11 @@ It is undo-recorded like the other terrain ops.
 | cmd | params |
 | --- | --- |
 | `move_element` | `id`, `x`, `y` |
-| `modify_object` | `id`, `scale?`, `rotation?`, `color?`, `shadow?` |
+| `modify_object` | `id`, `asset?`, `scale?`, `rotation?`, `color?`, `shadow?`, `layer?` |
 | `duplicate_object` | `id`, `dx=64`, `dy=0` → `{ id }` |
 | `delete_element` | `id` → `{ deleted }` |
-| `add_level` | `label="Level"` → `{ id, label }` |
-| `set_level` | `index` |
+| `add_level` | `label="Level"` → `{ index, id, label }` |
+| `set_level` | `index` → `{ current_index, current_id }` |
 | `select_elements` | `ids[]` |
 | `clear_selection` | — |
 
@@ -419,7 +419,7 @@ includes both native splat images when expanded slots are active and all texture
 paths. The planner records it after application and compares it before repaint.
 
 Batch schema v1 also accepts current-level object-only `move_element`
-(`id,x,y`), `modify_object` (`id,asset?,scale?,rotation?,shadow?,color?`) and
+(`id,x,y`), `modify_object` (`id,asset?,scale?,rotation?,shadow?,color?,layer?`) and
 `delete_object` (`id`). Texture changes are included in transform history.
 Reversible deletion snapshots the native serializer and restores a fresh Prop
 with the same ID using `Objects.LoadObject`; it never reattaches a stale Prop.
@@ -452,3 +452,26 @@ The higher-level Python `export_battlemap` tool uses unbaked native VTT export,
 validates JSON/image resolution and restores camera/grid/lighting. It supports
 single-level owned projects and optional Foundry 14 files; see PHASE5_REVIEW.md.
 Native VTT coordinates and light ranges are tiles, not woxels or pixels.
+
+## Island acceptance corrections (0.7.0, protocol 23)
+
+- `level_id` / `current_id` refer to native `Level.ID`, stable in one editor
+  session. `level_index` / `current_index` are list indices. CreateLevel inserts
+  at index 0; indices shift without changing the existing active native ID.
+  Native loading assigns IDs in file order. Project restoration matches the
+  checksummed file's active floor index and label, then rebinds manifest/surface
+  ID metadata before checking all terrain hashes, water and owned elements.
+- `set_level` explicitly calls `World.SetLevel(index, false)`, verifies the
+  active index, and synchronizes the public Editor level options. An omitted
+  optional managed argument previously returned success without switching.
+  Undo/redo operations carry their originating floor ID and reject another floor.
+- Object `layer` is integer -1000..1000; transforms maintain the native search
+  table when changing it. Creation, duplication and history preserve the layer.
+  Path layer remains 0..3. Pattern `z` is -1000..1000 and uses
+  `PatternShape.SetLayer(z)`; transient node z offsets did not survive saving.
+- Portal descriptors include native `closed`. Pattern floors and explicitly
+  open ordinary portals do not obstruct connectivity; unknown portal states,
+  other manual geometry and bounds remain conservative. Window/passability
+  semantics need manual review rather than inference from the light-block flag.
+- PNG exports isolate the selected floor using public SetSourceLevel and wait
+  for completion/restoration. This does not add multi-level Foundry export.

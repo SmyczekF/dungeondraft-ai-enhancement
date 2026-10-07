@@ -19,6 +19,7 @@ from .spec import (
     MapSpec,
     Road,
     Stream,
+    WaterRegion,
     TerrainRegion,
     Forest,
     Prop,
@@ -273,13 +274,15 @@ def generate(
                 road_clear.append(shape.buffer(f.clearance))
             else:
                 water.append((f, shape))
-        elif isinstance(f, (Forest, TerrainRegion, ClearArea, Building)):
+        elif isinstance(f, (Forest, TerrainRegion, WaterRegion, ClearArea, Building)):
             shape = polygon(f.region, f.id).intersection(
                 inner if isinstance(f, Forest) else bounds
             )
             if shape.is_empty:
                 raise LayoutError(f.id, "region is outside the map")
             semantics[f.id]["geometry"] = mapping(shape)
+            if isinstance(f, WaterRegion):
+                water.append((f, shape))
             if isinstance(f, ClearArea):
                 clear.append(shape)
             if isinstance(f, Building):
@@ -355,9 +358,10 @@ def generate(
             ):
                 raise LayoutError(
                     f.id,
-                    "deep stream intersects a road without a declared crossing area",
+                    "deep water intersects a road without a declared crossing area",
                 )
-        for ring in rings(shape.difference(crossings), f.id):
+        render_shape = shape if isinstance(f, WaterRegion) else shape.difference(crossings)
+        for ring in rings(render_shape, f.id):
             emit(f.id, {"cmd": "draw_water", "points": ring})
     prop_protected = unary_union(clear + road_clear + [g for _, g in water] + manual)
     for f in spec.features:

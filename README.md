@@ -31,6 +31,12 @@ forwards calls as JSON. See [PROTOCOL.md](PROTOCOL.md) for the wire format.
 > lifecycle, inspection, creation, terrain, editing, levels,
 > selection, capture, camera, and undo.
 
+The 0.7.0 island-coast acceptance, two-floor review, fixes and remaining gaps
+are documented in [FULL_MAP_REVIEW.md](FULL_MAP_REVIEW.md). The core specification
+is [examples/island-rescue.json](examples/island-rescue.json); it generates the
+terrain, coast, village outlines and palms. Furnishing and the upper floor are
+additional low-level edits, not implied by that example.
+
 Phase 1's live acceptance procedure and current verification status are in
 [PHASE1_REVIEW.md](PHASE1_REVIEW.md).
 
@@ -67,17 +73,13 @@ Phase 5 optional Universal VTT and Foundry 14 files are documented in
 - **Inspect:** `get_status`, `list_levels`, `list_elements`, `get_element`,
   `get_map_info`, `get_capabilities`, `list_asset_categories`, `list_assets`,
   `list_asset_metadata` (paged paths, dimensions and filename tags).
-- **Map files:** `open_map` and `save_map` manage native editable maps.
-  `save_map` validates the written native JSON and preserves the open scene.
-  To verify a reload, call `open_map` separately after the save notification
-  disappears. Immediate scene replacement can outlive native save UI callbacks.
-  Create a new blank map in Dungeondraft before the MCP edits it. The installed
-  editor's internal new-map call raised native exceptions when invoked by the
-  bridge, so the unsafe `create_map` command was removed. Saved maps can be
-  reopened through MCP.
-  On 1.2.0.1, UI New Map can log native object-cleanup exceptions even with
-  all mods disabled; restart the editor before creating the next blank map
-  if this happens. The bridge's separate port-conflict issue is fixed.
+- **Map files:** `save_map` validates written native JSON and preserves the open
+  scene. `open_map` requires `discard_current=true` and an empty current map
+  across all floors. Populated replacement is rejected before any scene change:
+  save, close the editor, then use the external launcher with the target native
+  file. Native cleanup exceptions were reproduced on 1.2.0.1.
+  Arbitrary new dimensions still require manual native creation or a prepared
+  blank template. The unsafe private creation prototype was rejected.
 - **Batch:** `apply_batch`, `get_batch`, `cancel_batch` validate and execute up to
   500 reversible operations across editor frames. Matching idempotency keys
   reuse the same retained job. Cancellation restores completed edits, including
@@ -98,7 +100,14 @@ Phase 5 optional Universal VTT and Foundry 14 files are documented in
   back; optional ground/wall tints), `clear_caves` wipes the whole cave layer.
 - **Edit:** `move_element`, `modify_object`, `duplicate_object`,
   `delete_element`, `select_elements`, `clear_selection`.
-- **Levels:** `add_level`, `set_level`.
+- **Levels:** `add_level` inserts a blank floor at index 0 and returns its index
+  and native ID; the previous floor stays active. `set_level` accepts the current
+  list index from `list_levels`. Native IDs are stable within a session and are
+  reassigned on file loading; saved project ownership is verified and rebound.
+- **Drawing layers:** objects accept `layer` (-1000..1000), including batches
+  and undo/redo. Pattern `z` selects a persistent native drawing layer. Use
+  negative layers for room floors, a higher deck layer over water, and higher
+  object layers for deck cargo. Floors and drawing layers are distinct.
 - **See:** `screenshot` (current window) and `export_map` (clean full-map
   render) return images, so the model can look at its own work and iterate.
 - **Camera:** `get_camera`, `set_camera`, `focus_element` (center on one

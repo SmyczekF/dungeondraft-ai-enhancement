@@ -205,6 +205,7 @@ func _record_and_dispatch(req : Dictionary) -> Dictionary:
 		if op != null:
 			_edit_sequence += 1
 			op["edit_id"] = _edit_sequence
+			op["level_id"] = Global.World.GetCurrentLevel().ID
 			_undo_stack.append(op)
 			_redo_stack = []   # a fresh edit invalidates the redo branch
 		if cmd in CREATE_CMDS or cmd in TRANSFORM_CMDS or cmd in TERRAIN_CMDS or cmd in CAVE_CMDS or cmd in ["draw_water", "delete_object"] or cmd in ["delete_element", "place_pattern", "build_room", "set_terrain_slot", "add_level", "undo", "redo"]:
@@ -249,7 +250,7 @@ func _do_undo() -> Dictionary:
 		return _ok({ "undone": false, "reason": "nothing to undo" })
 	var op = _undo_stack.back()
 	if not _apply_op(op, true):
-		return _err("cannot undo object creation: its original level or element is unavailable")
+		return _err("cannot undo: return to the original floor and ensure its element is available")
 	_undo_stack.pop_back()
 	_redo_stack.append(op)
 	return _ok({ "undone": true, "kind": op["kind"], "undo_depth": _undo_stack.size() })
@@ -260,13 +261,15 @@ func _do_redo() -> Dictionary:
 		return _ok({ "redone": false, "reason": "nothing to redo" })
 	var op = _redo_stack.back()
 	if not _apply_op(op, false):
-		return _err("cannot redo object creation: its original level, ID or asset is unavailable")
+		return _err("cannot redo: return to the original floor and ensure its element and asset are available")
 	_redo_stack.pop_back()
 	_undo_stack.append(op)
 	return _ok({ "redone": true, "kind": op["kind"], "redo_depth": _redo_stack.size() })
 
 
 func _apply_op(op, undo : bool) -> bool:
+	if Global.World.GetCurrentLevel() == null or Global.World.GetCurrentLevel().ID != op["level_id"]:
+		return false
 	match op["kind"]:
 		"delete_object":
 			var level = Global.World.GetCurrentLevel()
@@ -347,11 +350,24 @@ func _attach_node(node, parent, id : int):
 		node.RemakeLines()   # walls/paths cache geometry; refresh after re-adding
 
 
+func _set_object_layer(node, layer : int):
+	if node.z_index == layer:
+		return
+	var objects = Global.World.GetCurrentLevel().Objects
+	# The native selection search buckets are keyed by ZIndex. Remove at the
+	# old layer, then register at the new layer, including undo/redo.
+	objects.RemoveFromSearchTable(node)
+	node.z_index = layer
+	objects.AddToSearchTable(node, false)
+
+
 func _apply_props(node, snap):
 	if node == null or snap == null:
 		return
 	if snap.get("texture") != null and node.has_method("SetTexture"):
 		node.SetTexture(snap["texture"])
+	if snap.has("object_layer"):
+		_set_object_layer(node, int(snap["object_layer"]))
 	if snap.get("position") != null:
 		node.position = snap["position"]
 	if snap.get("rotation") != null:
@@ -424,6 +440,8 @@ func _snapshot(node) -> Dictionary:
 		s["shadow"] = node.get("HasShadow")
 	if node.get("customColor") != null:
 		s["color"] = node.get("customColor")
+	if node.get_parent() == Global.World.GetCurrentLevel().Objects:
+		s["object_layer"] = node.z_index
 	return s
 
 
@@ -438,7 +456,7 @@ func _safe_dispatch(req : Dictionary) -> Dictionary:
 			_refresh_export()
 			return _ok({"exporting": bool(_master().get("IsExporting")), "managed_export": not _export_state.empty(), "grid": Global.Editor.GridToggle.pressed, "lighting": Global.Editor.LightingToggle.pressed})
 		"delete_object": return _delete_object(req)
-		"get_water": return _ok({"level_id": Global.World.CurrentLevelId, "data": Global.World.GetCurrentLevel().WaterMesh.Save()})
+		"get_water": return _ok({"level_id": Global.World.GetCurrentLevel().ID, "data": Global.World.GetCurrentLevel().WaterMesh.Save()})
 		"ping": return _ok({ "pong": true, "protocol": PROTOCOL_VERSION, "bridge_instance": _instance_id, "engine": Engine.get_version_info() })
 		"get_status": return _get_status()
 		"get_map_info": return _get_map_info()
@@ -620,7 +638,8 @@ func _get_map_info() -> Dictionary:
 	if level != null:
 		info["size_tiles"] = [int(Global.World.WoxelDimensions.x / 256), int(Global.World.WoxelDimensions.y / 256)]
 		info["size_woxels"] = _vec(Global.World.WoxelDimensions)
-		info["level_id"] = Global.World.CurrentLevelId
+		info["level_id"] = level.ID
+		info["level_index"] = Global.World.CurrentLevelId
 		info["level_count"] = Global.World.levels.size()
 	return _ok(info)
 
@@ -632,6 +651,12 @@ func _open_map(req : Dictionary) -> Dictionary:
 		return _err("path must be an existing absolute .dungeondraft_map file")
 	if Global.World.GetCurrentLevel() != null and not bool(req.get("discard_current", false)):
 		return _err("a map is open; set discard_current=true to replace it")
+	# Native populated-map teardown can throw Prop._ExitTree exceptions even
+	# when opening reports success. Reject before clearing history or switching.
+	for native_level in Global.World.levels:
+		for element_kind in COLLECTIONS:
+			if not _elements(native_level, element_kind).empty():
+				return _err("open_map requires an empty current map; save and restart Dungeondraft with the target native file instead")
 	var master_node = _master()
 	if bool(master_node.get("IsSaving")) or bool(master_node.get("IsLoadingMap")):
 		return _err("editor is busy saving or loading")
@@ -704,8 +729,9 @@ func _get_status() -> Dictionary:
 		counts[kind] = _elements(level, kind).size()
 	return _ok({
 		"map_open": true,
-		"level_id": Global.World.CurrentLevelId,
+		"level_id": Global.World.GetCurrentLevel().ID,
 		"level_count": Global.World.levels.size(),
+		"level_index": Global.World.CurrentLevelId,
 		"map_size_woxels": [Global.World.WoxelDimensions.x, Global.World.WoxelDimensions.y],
 		"map_center": [Global.World.WoxelDimensions.x * 0.5, Global.World.WoxelDimensions.y * 0.5],
 		"counts": counts,
@@ -955,15 +981,10 @@ func _get_element(req : Dictionary) -> Dictionary:
 
 func _list_levels() -> Dictionary:
 	var out := []
-	var levels = Global.World.levels
-	var current_index := -1
-	for i in range(levels.size()):
-		var lv = levels[i]
-		out.append({ "index": i, "id": lv.ID, "label": lv.Label })
-		if lv.ID == Global.World.CurrentLevelId:
-			current_index = i
-	return _ok({ "current_index": current_index, "current_id": Global.World.CurrentLevelId, "levels": out })
-
+	for i in range(Global.World.levels.size()):
+		var lv = Global.World.levels[i]
+		out.append({"index": i, "id": lv.ID, "label": lv.Label})
+	return _ok({"current_index": Global.World.CurrentLevelId, "current_id": Global.World.GetCurrentLevel().ID, "levels": out})
 
 # ---------------------------------------------------------------------------
 # Create
@@ -974,7 +995,10 @@ func _place_object(req : Dictionary) -> Dictionary:
 	if level == null: return _err("no map open")
 	var tex = _asset_tex("Objects", req.get("asset", ""))
 	if tex == null: return _err("could not load object asset: " + str(req.get("asset")))
+	if not _batch_integer(req.get("layer", 0), -1000, 1000):
+		return _err("object layer must be an integer in -1000..1000")
 	var prop = level.Objects.CreateObject(int(req.get("sorting", 0)))
+	prop.z_index = int(req.get("layer", 0))
 	prop.SetTexture(tex)
 	prop.position = _xy(req, Global.World.WoxelDimensions * 0.5)
 	var s = float(req.get("scale", 1.0))
@@ -1166,6 +1190,8 @@ func _place_pattern(req : Dictionary) -> Dictionary:
 	if level == null: return _err("no map open")
 	if not Global.Editor.Tools.has("PatternShapeTool"):
 		return _err("PatternShapeTool not available")
+	if not _batch_integer(req.get("z", -100), -1000, 1000):
+		return _err("pattern layer z must be an integer in -1000..1000")
 	var category = str(req.get("category", "Patterns"))
 	var tex = _asset_tex(category, req.get("asset", ""))
 	if tex == null: return _err("could not load pattern asset: " + str(req.get("asset")))
@@ -1173,10 +1199,8 @@ func _place_pattern(req : Dictionary) -> Dictionary:
 	var shapes = level.PatternShapes
 	var pattern_tool = Global.Editor.Tools["PatternShapeTool"]
 	pattern_tool.Texture = tex
-	# NOTE: layer switching is intentionally not exposed. tool.SetLayer() on an
-	# index DD hasn't created hard-crashes the mod (GDScript has no try/catch)
-	# and the valid index range is undocumented. New shapes go to the tool's
-	# current layer.
+	# PatternShapeTool.SetLayer takes a dropdown INDEX, not a layer number.
+	# Move the created shape with PatternShape.SetLayer below instead.
 	#
 	# Color. CRITICAL: PatternShapeTool.Color is PERSISTENT TOOL STATE that leaks
 	# across calls — it holds whatever the previous place_pattern set, NOT a
@@ -1221,11 +1245,8 @@ func _place_pattern(req : Dictionary) -> Dictionary:
 	# DrawRect/DrawPolygon create the shape but don't apply the texture, so set
 	# it on the new shape directly via SetOptions(texture, color, rotation).
 	#
-	# Z-ORDER: new shapes land in the tool's default "Layer 100" node, whose
-	# z_index is 100 — ABOVE the Objects node (z 0), so the floor would cover
-	# furniture. The shape's own z_index is z_as_relative, i.e. an offset from
-	# that 100. To sit below objects we use an ABSOLUTE z: set z_as_relative=false
-	# and z_index=`z` (default -100, between FloorShapes at -200 and Objects at 0).
+	# Native Save() serializes GetLayer() (the parent layer), not shape.z_index.
+	# SetLayer uses GetOrMakeLayer and preserves the actual editable layer.
 	var all = shapes.GetShapes()
 	var result := { "shape": kind, "category": category, "shape_count": all.size() }
 	if color is Color:
@@ -1238,10 +1259,12 @@ func _place_pattern(req : Dictionary) -> Dictionary:
 		var shape = all[all.size() - 1]
 		if shape.has_method("SetOptions"):
 			shape.SetOptions(tex, color, rotation)
-		shape.z_as_relative = false
-		shape.z_index = int(req.get("z", -100))
+		shape.SetLayer(int(req.get("z", -100)))
+		shape.z_as_relative = true
+		shape.z_index = 0
 		result["id"] = _id(shape)
-		result["z_index"] = shape.z_index
+		result["z_index"] = int(shape.GetLayer())
+		result["layer"] = int(shape.GetLayer())
 	return _ok(result)
 
 
@@ -1675,6 +1698,9 @@ func _move_element(req : Dictionary) -> Dictionary:
 func _modify_object(req : Dictionary) -> Dictionary:
 	var node = _resolve(req)
 	if node == null: return _err("no element with id " + str(req.get("id")))
+	if req.has("layer"):
+		if node.get_parent() != Global.World.GetCurrentLevel().Objects or not _batch_integer(req["layer"], -1000, 1000):
+			return _err("layer requires a current-level object and an integer in -1000..1000")
 	if req.has("asset"):
 		if node.get_parent() != Global.World.GetCurrentLevel().Objects:
 			return _err("retexture requires an object")
@@ -1689,6 +1715,8 @@ func _modify_object(req : Dictionary) -> Dictionary:
 		node.SetCustomColor(_color(req["color"], Color(1, 1, 1)))
 	if req.has("shadow"):
 		node.set("HasShadow", bool(req["shadow"]))
+	if req.has("layer"):
+		_set_object_layer(node, int(req["layer"]))
 	return _ok(_describe(node))
 
 
@@ -1701,6 +1729,7 @@ func _duplicate_object(req : Dictionary) -> Dictionary:
 	var prop = level.Objects.CreateObject(0)
 	prop.SetTexture(src.Texture)
 	prop.position = src.position + Vector2(float(req.get("dx", 64.0)), float(req.get("dy", 0.0)))
+	prop.z_index = src.z_index
 	prop.scale = src.scale
 	prop.rotation = src.rotation
 	prop.set_meta("preview", false)
@@ -1724,16 +1753,24 @@ func _delete_element(req : Dictionary) -> Dictionary:
 
 func _add_level(req : Dictionary) -> Dictionary:
 	var lv = Global.World.CreateLevel(str(req.get("label", "Level")))
-	return _ok({ "id": lv.ID, "label": lv.Label })
+	Global.Editor.UpdateLevelOptions()
+	# CreateLevel inserts at index zero and keeps the previous floor active.
+	return _ok({"index": Global.World.levels.find(lv), "id": lv.ID, "label": lv.Label})
 
 
 func _set_level(req : Dictionary) -> Dictionary:
-	var idx = int(req.get("index", 0))
+	if not req.has("index") or not typeof(req["index"]) in [TYPE_INT, TYPE_REAL] or float(req["index"]) != floor(float(req["index"])):
+		return _err("index must be an integer")
+	var idx = int(req["index"])
 	if idx < 0 or idx >= Global.World.levels.size():
 		return _err("level index out of range: " + str(idx))
-	Global.World.SetLevel(idx)
-	return _ok({ "current_index": idx })
-
+	if idx != Global.World.CurrentLevelId:
+		# C# optional arguments must be supplied explicitly through GDScript.
+		Global.World.SetLevel(idx, false)
+	if Global.World.CurrentLevelId != idx:
+		return _err("native editor did not switch to the requested floor")
+	Global.Editor.SetLevelOptionsByID(Global.World.GetCurrentLevel().ID)
+	return _ok({"current_index": idx, "current_id": Global.World.GetCurrentLevel().ID})
 
 # ---------------------------------------------------------------------------
 # Capture
@@ -1772,9 +1809,9 @@ func _export_map(req : Dictionary) -> Dictionary:
 	_export_state = {"grid": Global.Editor.GridToggle.pressed, "lighting": Global.Editor.LightingToggle.pressed}
 	if req.has("grid"):
 		Global.Editor.ToggleGrid(req["grid"])
-	if format == "universalvtt" or req.has("lighting"):
-		Global.World.SetSourceLevel(Global.World.CurrentLevelId)
-		_export_state["restore_levels"] = true
+	# Export only the active native floor, including PNG previews of multilevel maps.
+	Global.World.SetSourceLevel(Global.World.CurrentLevelId)
+	_export_state["restore_levels"] = true
 	if req.has("lighting"):
 		Global.Editor.ToggleLighting(req["lighting"])
 	Global.Exporter.Start(3 if format == "universalvtt" else 0, int(ppi), path)
@@ -1803,7 +1840,7 @@ func _surface_state() -> Dictionary:
 		var texture = terrain.GetTexture(i)
 		paths.append(texture.resource_path if texture != null else "")
 	context.update(JSON.print(paths).to_utf8())
-	return _ok({"terrain_sha256": context.finish().hex_encode(), "textures": paths, "level_id": Global.World.CurrentLevelId})
+	return _ok({"terrain_sha256": context.finish().hex_encode(), "textures": paths, "level_id": Global.World.GetCurrentLevel().ID})
 
 
 func _delete_object(req : Dictionary) -> Dictionary:
@@ -2110,6 +2147,8 @@ func _describe(node) -> Dictionary:
 	var stool = Global.Editor.Tools["SelectTool"]
 	var t = stool.GetSelectableType(node)
 	var d := { "id": _id(node), "kind": KIND_NAMES.get(t, "unknown") }
+	if d["kind"] == "portal":
+		d["closed"] = bool(node.get("Closed"))
 	if node is Node2D:
 		d["position"] = _vec(node.position)
 		d["rotation"] = rad2deg(node.rotation)
@@ -2234,9 +2273,9 @@ const BATCH_OPERATIONS_PER_FRAME := 4
 const BATCH_FRAME_BUDGET_USEC := 8000
 const BATCH_FIELDS := {
 	"move_element": ["cmd", "id", "x", "y"],
-	"modify_object": ["cmd", "id", "asset", "scale", "rotation", "shadow", "color"],
+	"modify_object": ["cmd", "id", "asset", "scale", "rotation", "shadow", "color", "layer"],
 	"delete_object": ["cmd", "id"],
-	"place_object": ["cmd", "asset", "x", "y", "scale", "rotation", "sorting", "color"],
+	"place_object": ["cmd", "asset", "x", "y", "scale", "rotation", "sorting", "color", "layer"],
 	"draw_wall": ["cmd", "asset", "points", "loop", "shadow", "type", "joint", "color"],
 	"draw_path": ["cmd", "asset", "points", "layer", "sorting", "width", "smoothness"],
 	"add_light": ["cmd", "x", "y", "asset", "energy", "range", "shadows", "color"],
@@ -2302,7 +2341,11 @@ func _batch_validate(op) -> Array:
 	for field in ranges:
 		if op.has(field) and not _batch_number(op[field], ranges[field][0], ranges[field][1]):
 			errors.append(field + " is outside the batch limit")
-	for field in ["sorting", "layer", "type", "joint", "slot"]:
+	if op.has("layer"):
+		var object_layer = cmd in ["place_object", "modify_object"]
+		if not _batch_integer(op["layer"], -1000 if object_layer else 0, 1000 if object_layer else 3):
+			errors.append("object layer must be -1000..1000; path layer must be 0..3")
+	for field in ["sorting", "type", "joint", "slot"]:
 		if op.has(field) and not _batch_integer(op[field], 0, 3):
 			errors.append(field + " must be an integer in 0..3")
 	if op.has("sorting") and not op["sorting"] in [0, 1]:
@@ -2422,7 +2465,7 @@ func _apply_batch(req : Dictionary) -> Dictionary:
 		return _ok({"accepted": false, "schema_version": BATCH_SCHEMA_VERSION, "validation_errors": errors})
 	_batch_sequence += 1
 	var id = _instance_id + ":" + str(_batch_sequence)
-	var job := {"job_id": id, "key": key, "signature": signature, "operations": ops.duplicate(true), "status": "queued", "next": 0, "results": [], "rollback_ops": [], "history_start": _undo_stack.size(), "redo_before": _redo_stack.duplicate(), "level_id": Global.World.CurrentLevelId, "max_frame_ms": 0.0, "cancel": false}
+	var job := {"job_id": id, "key": key, "signature": signature, "operations": ops.duplicate(true), "status": "queued", "next": 0, "results": [], "rollback_ops": [], "history_start": _undo_stack.size(), "redo_before": _redo_stack.duplicate(), "level_id": Global.World.GetCurrentLevel().ID, "max_frame_ms": 0.0, "cancel": false}
 	_batch_jobs[id] = job
 	_batch_keys[key] = id
 	_active_batch = id
@@ -2462,7 +2505,7 @@ func _advance_batch():
 	if _active_batch == "":
 		return
 	var job = _batch_jobs[_active_batch]
-	if Global.World.GetCurrentLevel() == null or Global.World.CurrentLevelId != job["level_id"]:
+	if Global.World.GetCurrentLevel() == null or Global.World.GetCurrentLevel().ID != job["level_id"]:
 		job["error"] = "level changed outside the bridge; partial state cannot be rolled back safely"
 		_finish_batch(job, "failed_partial")
 		return
