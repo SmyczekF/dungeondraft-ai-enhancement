@@ -7,6 +7,13 @@ description: "Preview, create, revise and export believable top-down TTRPG battl
 
 Build a believable place that supports movement, decisions and encounter objectives. Deliver an editable native map and correctly scaled VTT artwork.
 
+## Map output directory
+
+- In the `dungeondraft-ai-enhancement` workspace, resolve the Git repository root and put all map output under `<repo-root>/dd-maps/<encounter-slug>/`. Resolve this from the repository root even when the working directory is nested; do not write maps inside `server/`, `mod/` or the skill folder. An explicit user destination takes precedence.
+- Keep the native map, final floor images, concept preview, concise play notes and current layout manifest together in that encounter directory. Any required project bundle or VTT export directory must also stay inside it.
+- Keep one canonical native map per encounter and replace its current floor exports when revising it. Reuse the existing encounter directory and native filename; do not create backup maps, older versions, numbered revision folders or per-edit journals unless requested. If a project bundle is needed, choose its native map as the canonical file rather than keeping another final native copy.
+- If the repository root cannot be determined, resolve the intended workspace before saving instead of guessing a different output location.
+
 ## Start here when no map is open
 
 - Before asking the user/developer to open or create a map, estimate the required width and height in squares from the requested setting, encounter footprint, feature sizes, playable routes and square scale. This sizing analysis can be done without a live bridge or open map.
@@ -18,7 +25,7 @@ Build a believable place that supports movement, decisions and encounter objecti
 - Use **Dungeondraft MCP** for every operation it supports: asset discovery, placement, levels, camera inspection, saving and export. Check live capabilities instead of inventing tools or copying stale parameters.
 - **Ask the user by default** when a blank map must be created, the application must be opened/restarted, a dialog must be handled, or an operation needs manual input. Give precise dimensions/settings and resume after their answer. Do not substitute computer use. Use computer use only when the user explicitly authorizes it for the task, and still prefer MCP where available.
 - Call `ping`, then `get_status`, then `get_capabilities` before planning live edits. Require a running bridge and an open map; if the bridge is unreachable or no map is open, follow the sizing and user instructions in **Start here when no map is open** before requesting startup or map loading. Do not retry blindly.
-- Preserve existing maps unless the user requests replacement. Save new work under new filenames. Read the applicable project `AGENTS.md` and bridge documentation when available.
+- Preserve unrelated maps. Use a new encounter directory for a new map; revise an existing encounter at its canonical native path. Read the applicable project AGENTS.md and bridge documentation when available.
 
 ## Before every new map: generate a concept image
 

@@ -1,7 +1,16 @@
-# Dungeondraft MCP
+# Dungeondraft AI Enhancement
 
-This repository contains the runtime Python MCP server and Dungeondraft bridge
-mod. See README.md for installation, supported workflows and operational limits.
+This repository is a map-creation workspace containing the Python MCP server and Dungeondraft bridge mod. See README.md for installation, supported workflows and operational limits.
+
+## Workspace and map output
+
+- For map work, use .agents/skills/dungeondraft-map-skill/SKILL.md.
+- Resolve the Git repository root and save map output in dd-maps/<encounter-slug>/.
+  This rule applies from nested working directories too. Explicit user destinations override it.
+- Keep each encounter's native map, current floor exports, concept preview, notes,
+  layout manifest and any project/VTT bundle inside that encounter directory.
+- Keep one canonical native map per encounter. Revise it and replace current
+  exports in place; do not create backups, old versions or per-edit journals unless requested.
 
 ## Before live operations
 
@@ -38,8 +47,8 @@ mod. See README.md for installation, supported workflows and operational limits.
 
 ## Runtime maintenance
 
-- Keep this checkout focused on runtime files and concise current documentation.
-  Do not add phase journals, review artifacts, sample maps or ad hoc smoke scripts.
+- Keep runtime code and documentation concise; put map output only in dd-maps/.
+  Do not add phase journals, review artifacts or ad hoc smoke scripts to the repo.
 - Mod handler edits need Reload Mods; new scripts/startup state need a fresh
   editor launch and map load. Reload Mods does not rerun start().
 - Python tool definition changes need an MCP server restart. Editable installs

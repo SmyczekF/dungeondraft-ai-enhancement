@@ -1,6 +1,7 @@
-# Dungeondraft MCP
+# Dungeondraft AI Enhancement
 
-An MCP server that lets an AI client inspect and edit a running Dungeondraft
+A workspace for building Dungeondraft maps with AI, backed by an MCP server.
+The server lets an AI client inspect and edit a running Dungeondraft
 map. Version 0.7.1 targets Dungeondraft 1.2.0.1 on Windows, using Godot 3.4.2
 and bridge protocol 23.
 
@@ -34,7 +35,7 @@ Register the installed executable by its absolute path in your MCP client:
 {
   "mcpServers": {
     "dungeondraft": {
-      "command": "C:\\absolute\\path\\to\\dungeondraft-mcp\\.venv\\Scripts\\dungeondraft-mcp.exe",
+      "command": "C:\\absolute\\path\\to\\dungeondraft-ai-enhancement\\.venv\\Scripts\\dungeondraft-mcp.exe",
       "args": []
     }
   }
@@ -62,6 +63,28 @@ a map has loaded, and port 8787 is available. The editor log should contain:
 ~~~
 
 Connection checks do not place objects or alter the map.
+
+## Map workspace
+
+Open the **dungeondraft-ai-enhancement repository root** as your Codex project.
+The bundled skill in .agents/skills/dungeondraft-map-skill/ is then discoverable
+within the repo and its subfolders. Start map requests with:
+
+~~~text
+Use $dungeondraft-map-skill to build a pirate hideout.
+Save the encounter under dd-maps/pirate-hideout/.
+~~~
+
+All map output belongs in **dd-maps/<encounter-slug>/**, resolved from the Git
+repository root even when working in a nested folder. Keep the native map,
+current floor PNGs, concept preview, play notes and layout manifest together.
+Project bundles and optional VTT exports also stay inside that encounter folder.
+Keep one canonical native map per encounter; revise it and replace current
+exports in place. Create backups or numbered versions only when requested.
+An explicit user destination overrides this default.
+
+The Python package, executable and MCP connection are still named
+dungeondraft-mcp; dungeondraft-ai-enhancement is the repository/workspace name.
 
 ## Tools and map workflow
 
@@ -136,16 +159,20 @@ not request correlation IDs.
 
 ## Dungeondraft map skill
 
-The bundled [Dungeondraft map skill](skills/dungeondraft-map-skill/SKILL.md)
+The bundled [Dungeondraft map skill](.agents/skills/dungeondraft-map-skill/SKILL.md)
 covers encounter design, concept previews, native construction, visual review
 and final floor exports. Copy the entire folder, including references/ and agents/.
 
-### Make it available to Codex
+### Codex discovery and use
 
-Registering the MCP server does not install this skill. The repository's plain
-skills/ directory is a distribution location, not a Codex discovery location.
-Install the skill once in your user skill directory, or in a map project's
-.agents/skills/ directory for use within that project.
+The skill is stored in .agents/skills/dungeondraft-map-skill/, so Codex can
+discover it when working in this repository or one of its subdirectories.
+Codex checks .agents/skills along the path from the working directory up to
+the repository root; it does not recursively search unrelated nested folders.
+
+Registering the MCP server does not install its repository skills globally.
+To use this skill from a separate maps workspace, install it in your user
+skill directory or that map project's .agents/skills/ directory.
 
 Run this from the repository root in PowerShell for user-wide installation:
 
@@ -156,7 +183,7 @@ if (Test-Path -LiteralPath $skillTarget) {
     throw 'Skill already installed. Review that copy before replacing it.'
 }
 New-Item -ItemType Directory -Path $skillRoot -Force | Out-Null
-Copy-Item -LiteralPath '.\skills\dungeondraft-map-skill' -Destination $skillTarget -Recurse
+Copy-Item -LiteralPath '.\.agents\skills\dungeondraft-map-skill' -Destination $skillTarget -Recurse
 ~~~
 
 For project-only installation, use the same commands with $skillRoot set to
@@ -193,7 +220,8 @@ the Dungeondraft MCP tools; their skill installation and discovery rules differ.
 mod/dungeondraft-mcp-bridge/    Dungeondraft mod and command handlers
 server/dungeondraft_mcp/       Python MCP server, planner and project/export logic
 server/pyproject.toml          Dependencies, package metadata and executable entrypoint
-skills/dungeondraft-map-skill/ Map-making skill, references and agent metadata
+.agents/skills/dungeondraft-map-skill/ Map-making skill, references and agent metadata
+dd-maps/                      Encounter maps and their final output
 .venv/                        Local installed runtime; ignored by Git
 AGENTS.md                     Instructions for agents operating the bridge
 LICENSE                       MIT license
@@ -201,7 +229,7 @@ LICENSE                       MIT license
 
 The schema is generated from the Python models. Historical phase reports,
 review screenshots, smoke scripts, demos and test fixtures are not runtime
-dependencies and are not part of this runtime-focused checkout.
+dependencies and are not part of this checkout.
 
 Changes to existing mod handlers require Reload Mods or an editor restart.
 Reload Mods does not rerun startup: new script files, startup initialization or
