@@ -42,3 +42,9 @@ Record the source/profile, bright radius, additional dim distance, Foundry total
 Universal VTT carries one range, and the examined importer derives bright as half dim. That reproduces 20/40 but **cannot encode Lamp 15/45 correctly**. Supply explicit Foundry corrections for that profile; setting its outer range to 45 alone produces 22.5/45 in that importer. See [the export workflow](foundry-vtt.md).
 
 Review color/animation separately. Test the bright boundary, outer dim boundary, wall interaction and hood changes using a player-view token under night/test lighting. Global daylight can mask errors. Do not reset campaign fog or rewrite token senses to hide a light configuration problem.
+
+### Avoid excessive visual glow
+
+Rules radii describe illumination coverage, not glow strength. Foundry's `config.alpha` is **Color Intensity**, distinct from `config.luminosity`, which controls rendered brightness. Native Dungeondraft `intensity` is not a directly interchangeable alpha. The examined adapter copied native intensity 0.9 to alpha 0.9; Universal Battlemap Importer used `0.05 * intensity`, giving 0.045 for the same source. That twentyfold increase in color intensity caused the reported washed-out fire/lantern appearance.
+
+When preserving an existing imported map's appearance, match its known working visual settings before changing ranges. For this camp, use alpha **0.045**, normal Adaptive Luminance coloration (`coloration: 1`), the earlier luminosity **0.5**, attenuation **0.5**, and neutral contrast/saturation/shadows. These are visual settings for this artwork, not D&D rules or universal light presets. Keep the verified bright/dim distances intact. Avoid halo, sunburst and intense animations unless requested; inspect actual Foundry rendering before claiming visual acceptance. See [Foundry's color intensity and luminosity controls](https://foundryvtt.com/article/lighting/).

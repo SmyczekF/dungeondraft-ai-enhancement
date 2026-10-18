@@ -120,6 +120,68 @@ tiles. Export pixels per tile are a separate setting. Native floor IDs and list
 indices are different; resolve them with list_levels after loading a map.
 Drawing layers control order within a floor and do not create another floor.
 
+## Import into Foundry VTT
+
+**Recommended: import the completed `foundry-scene.json` with Foundry's built-in
+Import Data command.** Use the Foundry 14 export delivered under
+`dd-maps/<encounter-slug>/foundry/`. The Foundry export skill prepares a
+self-contained JSON with the background image, grid, configured walls, doors
+and lighting together. No importer module, script macro or separate background
+selection is needed for that completed export. Raw adapter output initially
+references a separate PNG; it must be finalized with the Foundry export skill
+to provide this single-file experience.
+
+### Import the JSON map
+
+1. Open the **Scenes** tab in Foundry's right sidebar (the folded-map icon).
+2. Click **Create Scene**, enter a name, and create it. If Scene Configuration
+   opens, click **Save Changes** to return to the Scenes list.
+3. **Right-click the new scene in the Scenes list** and choose **Import Data**.
+   Import is in this context menu, not in the Scene Configuration window.
+4. Select the map's **`foundry-scene.json`**, then click **Import**. The embedded
+   background and scene settings are imported together.
+5. Right-click the imported scene and choose **View Scene**.
+6. Optionally, right-click the same scene again and choose **Regenerate
+   Thumbnail Image** (or **Generate Thumbnail Image**, depending on the version)
+   to refresh its preview in the Scenes list.
+
+Import as a GM with file-upload permission so Foundry can save the embedded
+image. Import Data replaces the selected scene's data, so use a new empty
+scene to preserve tokens or other work in an existing scene. The scene name
+can change to the name stored in the JSON. See Foundry's official
+[scene import and context-menu documentation](https://foundryvtt.com/article/scenes/).
+
+The `.dungeondraft_map` file is the editable Dungeondraft source; a standalone
+PNG is artwork only. Neither is the complete Foundry scene import. If the
+background is missing after importing an older, path-based JSON, select/upload
+the PNG in Scene Configuration, or request a finalized self-contained export.
+
+### Universal Battlemap Importer: available, but discouraged for these exports
+
+[Dungeondraft's official VTT Integrations guidance](https://dungeondraft.net/)
+links to [Universal Battlemap Importer](https://foundryvtt.com/packages/dd-import/)
+for importing its Universal VTT (`.dd2vtt`) exports. That route remains usable
+for ordinary native Dungeondraft maps; follow the
+[importer's documentation](https://github.com/moo-man/FVTT-DD-Import) if you
+intentionally choose it.
+
+**We discourage that route when a completed Foundry scene JSON is supplied.**
+The examined importer reconstructs basic walls, doors and lights from generic
+Universal VTT data instead of using our finished Foundry settings. It does not
+transfer the additional movement-only cage walls, Limited/terrain rock and
+tent walls, one-way cliff restrictions, cage locks or global illumination with
+its 0.8 darkness threshold. Its single light range is converted to bright
+light at half the total dim radius, so pairs such as an oil lamp's 15/45 ft
+cannot be reproduced exactly. Basic walls/doors and image import can still
+work while these extra behaviors are missing.
+
+Use **`foundry-scene.json` through Import Data** for the complete prepared map.
+The supplied `.dd2vtt` is a limited alternative, not an additional import step.
+These limits describe the examined format/importer route, not limitations of
+Foundry itself. See the
+[Foundry export reference](.agents/skills/dungeondraft-foundry-export/references/foundry-vtt.md)
+for conversion details and verification checks.
+
 ## Operational limits
 
 - A populated map cannot be replaced through open_map on Dungeondraft 1.2.0.1.
