@@ -137,8 +137,55 @@ not request correlation IDs.
 ## Dungeondraft map skill
 
 The bundled [Dungeondraft map skill](skills/dungeondraft-map-skill/SKILL.md)
-provides map design, visual review and export guidance. Its supporting references
-and agent metadata are included in the same directory.
+covers encounter design, concept previews, native construction, visual review
+and final floor exports. Copy the entire folder, including references/ and agents/.
+
+### Make it available to Codex
+
+Registering the MCP server does not install this skill. The repository's plain
+skills/ directory is a distribution location, not a Codex discovery location.
+Install the skill once in your user skill directory, or in a map project's
+.agents/skills/ directory for use within that project.
+
+Run this from the repository root in PowerShell for user-wide installation:
+
+~~~powershell
+$skillRoot = Join-Path $env:USERPROFILE '.agents\skills'
+$skillTarget = Join-Path $skillRoot 'dungeondraft-map-skill'
+if (Test-Path -LiteralPath $skillTarget) {
+    throw 'Skill already installed. Review that copy before replacing it.'
+}
+New-Item -ItemType Directory -Path $skillRoot -Force | Out-Null
+Copy-Item -LiteralPath '.\skills\dungeondraft-map-skill' -Destination $skillTarget -Recurse
+~~~
+
+For project-only installation, use the same commands with $skillRoot set to
+the absolute path of that project's .agents/skills directory.
+Keep one installed copy; check for an existing installation before copying.
+
+Codex detects local skill changes automatically; restart it if the skill does
+not appear. It can select a discovered skill when its description matches the
+request. Explicitly name it for predictable activation:
+
+~~~text
+Use $dungeondraft-map-skill to create a 30 by 30 square pirate hideout,
+with 5 feet per square and separate playable floors.
+~~~
+
+In Codex CLI or the IDE extension, /skills or the $ skill selector can also
+show available skills. See the [official skill documentation](https://learn.chatgpt.com/docs/build-skills)
+for discovery locations and invocation behavior.
+
+### Required capabilities
+
+The skill supplies instructions; it does not start Dungeondraft, register the
+MCP server or provide image generation. Complete the MCP setup above and load
+a map with MCP Bridge enabled before native editing. New maps require access
+to image generation for the concept preview; if unavailable, the skill asks
+how to proceed. Install the skill on the computer/environment running the agent.
+
+Other agents can follow SKILL.md and its references when given file access and
+the Dungeondraft MCP tools; their skill installation and discovery rules differ.
 
 ## Repository contents and maintenance
 
