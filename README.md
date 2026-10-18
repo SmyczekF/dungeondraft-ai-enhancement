@@ -163,6 +163,23 @@ The bundled [Dungeondraft map skill](.agents/skills/dungeondraft-map-skill/SKILL
 covers encounter design, concept previews, native construction, visual review
 and final floor exports. Copy the entire folder, including references/ and agents/.
 
+Foundry delivery is an optional companion workflow in
+[Dungeondraft to Foundry VTT](.agents/skills/dungeondraft-foundry-export/SKILL.md).
+Use it later with an existing map, or combine both skills when creating a map
+for Foundry. It covers export routes, walls, doors, windows, lighting, import
+corrections and player-view checks. Ordinary map creation needs only the map
+skill; no Foundry choice is required. Install the companion folder separately
+if using these skills outside this repository.
+
+~~~text
+Use $dungeondraft-foundry-export to export my existing map for Foundry VTT 14.
+~~~
+
+~~~text
+Use $dungeondraft-map-skill and $dungeondraft-foundry-export to build a pirate
+hideout and prepare its Foundry VTT export.
+~~~
+
 ### Codex discovery and use
 
 The skill is stored in .agents/skills/dungeondraft-map-skill/, so Codex can

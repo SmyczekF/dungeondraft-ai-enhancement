@@ -72,6 +72,10 @@ Within each level, use distinct native components and drawing layers for terrain
 
 Read [references/mcp-workflow.md](references/mcp-workflow.md) before level creation, batching or export. Maintain a label/ID/index map; adding a floor shifts indices. Confirm the active level before each placement batch. Do not flatten true playable floor separation merely to satisfy an export limitation. Explain the gap and export supported floors individually or request the specific user action needed for a combined view.
 
+## Optional Foundry VTT delivery
+
+When the user requests Foundry preparation or export, also use the companion [dungeondraft-foundry-export skill](../dungeondraft-foundry-export/SKILL.md), if available. It can be used during creation or later with an existing map. Ordinary map requests do not require choosing a VTT or loading that workflow; ask about the target only when it affects a requested export. Keep generic map creation and floor-art exports usable without the companion skill.
+
 ## Build, inspect and deliver
 
 - Prefer `plan_battlemap`/`apply_battlemap` where the live planner supports the design. Inspect warnings and preserve the semantic/native-ID manifest. Use low-level MCP tools for native floors, patterns, roofs and other unsupported details; keep each planner record tied to its original level.

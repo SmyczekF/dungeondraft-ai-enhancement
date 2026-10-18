@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dungeondraft to Foundry VTT"
+  short_description: "Prepare Dungeondraft maps for Foundry VTT"
+  default_prompt: "Use $dungeondraft-foundry-export to prepare this existing Dungeondraft map for Foundry VTT and identify any import corrections."

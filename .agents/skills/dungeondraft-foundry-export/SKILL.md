@@ -1,0 +1,29 @@
+---
+name: dungeondraft-foundry-export
+description: "Prepare and export Dungeondraft maps for Foundry Virtual Tabletop, including walls, doors, windows, lighting, import handoff and runtime checks. Use when Foundry delivery is requested for a new or existing map; complements dungeondraft-map-skill. Not needed for ordinary map creation or image-only exports."
+---
+
+# Dungeondraft to Foundry VTT
+
+Turn a Dungeondraft map into an explicitly versioned Foundry export with enough semantic information to correct import losses. Use this skill independently for an existing map or together with `dungeondraft-map-skill` when a new map is intended for Foundry.
+
+## Scope and entry points
+
+- **Existing map / export later:** inspect the canonical map, available project bundle, layout manifest and notes. Assess what can be exported before changing the map. Do not regenerate a concept, recreate the encounter or require map-construction steps merely to export it.
+- **New map for Foundry:** combine with the [map creation skill](../dungeondraft-map-skill/SKILL.md), if available. Plan restrictions, openings and lights before construction. The map skill owns concept/design/native visual review; this skill owns Foundry semantics, export and import acceptance.
+- **Files already exported:** inspect their completion manifest, target version, image path and warnings first. Live Dungeondraft access is needed only for native inspection, corrections or re-export.
+- Load this workflow when Foundry delivery is requested or clearly established by context. Do not add an export-choice prompt to every map request. If a requested VTT export has no known target and the choice affects the deliverable, clarify the target then.
+
+## Workflow
+
+1. Read [references/foundry-vtt.md](references/foundry-vtt.md) for route selection, conversion limits and acceptance checks. Resolve the target Foundry generation, game system, scale and floor arrangement from context; ask only for missing information that changes the route.
+2. Before live bridge operations, call `ping`, `get_status`, then `get_capabilities`; require protocol 23 and `map_open=true`. If ping fails, request Dungeondraft with MCP Bridge enabled and a loaded map; do not retry blindly. Inspect existing content before editing and use current tool schemas. Prefer MCP; computer use requires the user's explicit authorization.
+3. Preserve intended movement, sight, light and sound restrictions in existing encounter notes/layout metadata, with floor and native/semantic IDs or tile coordinates. Record secret/locked doors, window behavior, bright/dim radii and floor transitions that export may lose. Artwork is separate from functional VTT data.
+4. Select an eligible export route. The examined repository adapter targets **Foundry 14**, a validated applied/restored **single-level** project, a square grid and **5 ft per square**. Native Universal VTT plus a compatible importer is an alternative. Do not invent planner ownership, flatten floors or silently change scale. If the requested route is unsupported, deliver supported artwork/data and precise remaining work.
+5. Save and review any native corrections, export, wait for completion and inspect the resulting files and warnings. Keep all output under `<Git-repository-root>/dd-maps/<encounter-slug>/`, including when invoked from nested directories, unless the user specifies another destination. Reuse the encounter's canonical native map; preserve needed project ownership and avoid backup/version folders by default.
+6. Follow the chosen import handoff and correct conversion losses in the target runtime when access and authorization are available. Use existing authorization without adding another approval step. File export alone does not authorize world changes or prove successful import. Never rerun a scene-creation macro blindly after an uncertain result.
+7. Apply the reference's player-view acceptance checks before claiming runtime verification. Deliver paths, target version, scale, corrections and unresolved items; distinguish **files exported**, **scene imported** and **runtime behavior verified**. When runtime access is absent, finish the requested file handoff and identify the pending import/checks clearly.
+
+## Known conversion gaps
+
+The current adapter turns native portals into ordinary doors; windows, secret types and locks need explicit correction. Lights are approximate, and ambient illumination needs review. Cover, difficult terrain and encounter zones remain metadata; actors, tokens, game-system automation and automatic multi-floor transitions are not created. A PNG alone carries none of those behaviors. Recheck these limits against the implementation and capabilities when versions change.
