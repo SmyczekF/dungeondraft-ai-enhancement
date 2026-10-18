@@ -1,7 +1,7 @@
 # MCP Bridge — Dungeondraft mod
 #
 # Opens a localhost TCP server inside Dungeondraft and speaks a tiny
-# newline-delimited JSON protocol (see PROTOCOL.md) so an external MCP server
+# newline-delimited JSON protocol (see README.md) so an external MCP server
 # can drive the currently-open map for AI-assisted map building.
 #
 # Engine: Dungeondraft runs Godot 3.4.2, so this uses the Godot 3 networking

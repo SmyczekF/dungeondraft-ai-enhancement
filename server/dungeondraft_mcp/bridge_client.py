@@ -1,7 +1,7 @@
 """Thin TCP client for the Dungeondraft MCP bridge mod.
 
 Each request opens a short-lived connection, sends one newline-delimited JSON
-object, and reads one newline-delimited JSON object back. See PROTOCOL.md.
+object, and reads one newline-delimited JSON object back. See README.md.
 """
 
 from __future__ import annotations
