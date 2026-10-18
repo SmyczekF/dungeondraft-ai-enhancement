@@ -134,12 +134,19 @@ contains cmd and its parameters. Successful replies contain
 {"ok": false, "error": "..."}. Element id values identify native elements,
 not request correlation IDs.
 
+## Dungeondraft map skill
+
+The bundled [Dungeondraft map skill](skills/dungeondraft-map-skill/SKILL.md)
+provides map design, visual review and export guidance. Its supporting references
+and agent metadata are included in the same directory.
+
 ## Repository contents and maintenance
 
 ~~~text
 mod/dungeondraft-mcp-bridge/    Dungeondraft mod and command handlers
 server/dungeondraft_mcp/       Python MCP server, planner and project/export logic
 server/pyproject.toml          Dependencies, package metadata and executable entrypoint
+skills/dungeondraft-map-skill/ Map-making skill, references and agent metadata
 .venv/                        Local installed runtime; ignored by Git
 AGENTS.md                     Instructions for agents operating the bridge
 LICENSE                       MIT license

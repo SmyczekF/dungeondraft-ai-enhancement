@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dungeondraft Map Skill"
+  short_description: "Create believable TTRPG maps using Dungeondraft MCP"
+  default_prompt: "Use $dungeondraft-map-skill to preview and build a playable VTT map in Dungeondraft."
