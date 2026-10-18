@@ -244,3 +244,28 @@ parser before reloading changed GDScript.
 Maintained by Filip Smyczek. Forked from Brandon Florian's MIT-licensed
 Dungeondraft MCP project; the original copyright notice remains in [LICENSE](LICENSE).
 Built against the [Dungeondraft Modding API](https://megasploot.github.io/DungeondraftModdingAPI/).
+
+## Roadmap
+
+Development priorities:
+
+- **Stronger skill and MCP alignment:** Keep the skill's workflows, tool schemas
+  and live capabilities in sync. Improve capability discovery, actionable errors
+  and recovery so agents can reliably complete the full map-building workflow.
+- **Direct Foundry VTT delivery:** Extend export toward ready-to-use Foundry
+  scenes with aligned floors, walls, doors, lighting and encounter metadata.
+  Verify imports in the target Foundry version and reduce manual scene setup.
+- **Greater agent autonomy:** Support reliable application startup, blank-map
+  creation, map sizing, floor setup, saving and export through supported tools.
+  Handle routine steps and recoverable failures with fewer user interventions;
+  ask for input when a meaningful user decision is needed.
+- **More believable maps:** Improve proportions, building layouts, furnishings,
+  terrain transitions, coastlines and readable elevation. Make routes, access,
+  infrastructure and asset placement fit the setting and encounter.
+- **RPG-system adaptation:** Adapt scale, creature footprints, movement, cover,
+  visibility and encounter features to the requested RPG system and edition.
+  Use verified rules where available and distinguish them from GM suggestions.
+- **Better iteration and quality checks:** Strengthen whole-map and room-scale
+  visual review, route and clearance checks, floor alignment and final-export
+  inspection. Use the findings to revise the canonical map and improve the skill
+  through practical map-making experience.
