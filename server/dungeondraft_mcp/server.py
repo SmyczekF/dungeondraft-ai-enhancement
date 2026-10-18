@@ -200,9 +200,11 @@ def apply_batch(operations: list[dict], idempotency_key: str, wait: bool = True)
     """Preflight and apply 1..500 edits as one native job (batch schema v1).
 
     Supports objects, paths, normal walls, lights, free portals, fill_terrain,
-    paint_terrain and paint_path. Coordinates are woxels; see get_capabilities
+    paint_terrain, paint_path, draw_water, and water/terrain settings.
+    Coordinates are woxels; see get_capabilities
     for bounds and limits. Explicit assets are required except default lights;
-    free portals require mount="free". At most 16 terrain operations per job.
+    free portals require mount="free". At most 16 terrain painting operations
+    and 16 water drawing/settings operations per job.
     Invalid plans return accepted=false and indexed errors before any edits.
     Matching retries reuse the retained job in this bridge instance. Default
     wait polls internally for up to 90 seconds; wait=False returns a job_id for
@@ -632,6 +634,65 @@ def add_text(
 # --------------------------------------------------------------------------
 
 @mcp.tool()
+def get_water_settings() -> dict:
+    """Read active-floor water defaults, border, and existing region styles.
+
+    Colors use #RRGGBB; blend_distance uses Dungeondraft's native slider units.
+    Defaults are session settings; existing region styles persist in the map.
+    """
+    return bridge.request("get_water_settings")
+
+
+@mcp.tool()
+def set_water_settings(
+    deep_color: Optional[str] = None,
+    shallow_color: Optional[str] = None,
+    blend_distance: Optional[float] = None,
+    border: Optional[bool] = None,
+    apply_to_existing: bool = True,
+) -> dict:
+    """Style active-floor water without changing its polygons. Undoable.
+
+    Pass #RRGGBB colors, native blend distance (0..10), and border=True to show
+    shoreline borders. Omitted fields stay unchanged. By default, supplied
+    colors/blending update all existing filled regions AND future drawing
+    defaults. apply_to_existing=False changes only session drawing defaults;
+    they persist in the native map once used to draw water. Border is always
+    floor-wide and persistent. Does not select/activate the brush tool.
+    """
+    params = {k: v for k, v in {
+        "deep_color": deep_color, "shallow_color": shallow_color,
+        "blend_distance": blend_distance, "border": border,
+    }.items() if v is not None}
+    return bridge.request("set_water_settings", **params, apply_to_existing=apply_to_existing)
+
+
+@mcp.tool()
+def get_terrain_settings() -> dict:
+    """Read active-floor terrain visibility, smooth blending, and slot expansion."""
+    return bridge.request("get_terrain_settings")
+
+
+@mcp.tool()
+def set_terrain_settings(
+    enabled: Optional[bool] = None,
+    smooth_blending: Optional[bool] = None,
+) -> dict:
+    """Set active-floor Terrain Brush Enabled/Smooth Blending options. Undoable.
+
+    enabled=False hides terrain for transparent asset exports; it preserves
+    painted terrain and textures. Does not activate/deactivate the brush tool.
+    Omitted options stay unchanged. Both settings persist in the native map.
+    Keep terrain enabled for ocean/river renders: native water over disabled
+    terrain renders black in Dungeondraft 1.2.0.1.
+    """
+    params = {k: v for k, v in {
+        "enabled": enabled, "smooth_blending": smooth_blending,
+    }.items() if v is not None}
+    return bridge.request("set_terrain_settings", **params)
+
+
+@mcp.tool()
 def set_terrain_slot(asset: str, slot: int = 0) -> dict:
     """Assign a Terrain asset to a terrain slot index so it can be filled/painted with that slot."""
     return bridge.request("set_terrain_slot", asset=asset, slot=slot)
@@ -857,17 +918,20 @@ def screenshot() -> Image:
 
 
 @mcp.tool()
-def export_map(ppi: int = 40) -> Image:
+def export_map(ppi: int = 40, grid: Optional[bool] = None, lighting: Optional[bool] = None) -> Image:
     """Render the entire current map to a clean PNG (no UI) and return it as an image.
 
     ppi controls resolution (pixels per grid cell): higher = sharper but larger/slower.
     The render runs asynchronously in Dungeondraft; this waits for it to finish.
+    grid/lighting override visibility for this export only; omitted options
+    retain the editor's current settings. Previous settings are restored.
     """
     try:
         os.remove(_EXPORT_PATH)
     except FileNotFoundError:
         pass
-    bridge.request("export_map", path=_EXPORT_PATH, ppi=ppi)
+    options = {k: v for k, v in {"grid": grid, "lighting": lighting}.items() if v is not None}
+    bridge.request("export_map", path=_EXPORT_PATH, ppi=ppi, **options)
     _wait_for_file(_EXPORT_PATH)
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:

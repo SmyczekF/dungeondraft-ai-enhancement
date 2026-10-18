@@ -22,6 +22,22 @@ def normalize_native(value):
     return value
 
 
+def water_geometry(value):
+    """Ownership covers polygons/topology; appearance can be styled independently.
+
+    The full native water data still participates in stale-plan detection and
+    project persistence. Ignore only known appearance fields and session refs.
+    """
+    if isinstance(value, dict):
+        return {
+            k: water_geometry(v) for k, v in value.items()
+            if k not in {"ref", "deep_color", "shallow_color", "blend_distance", "disable_border"}
+        }
+    if isinstance(value, list):
+        return [water_geometry(v) for v in value]
+    return value
+
+
 def water_bounds(data):
     result = []
 
@@ -363,16 +379,16 @@ class Planner:
         report = validate(
             record["plan"], record["manifest"], context, record.get("surface")
         )
-        if context["content"]["water"] != record.get(
+        if water_geometry(context["content"]["water"]) != water_geometry(record.get(
             "water", context["content"]["water"]
-        ):
+        )):
             report["findings"].append(
                 {
                     "severity": "error",
                     "code": "water_changed",
                     "feature_id": "map",
                     "coordinates_tiles": None,
-                    "message": "native water differs from project ownership snapshot",
+                    "message": "native water geometry differs from project ownership snapshot",
                 }
             )
             report["valid"] = False

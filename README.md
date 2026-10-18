@@ -88,7 +88,7 @@ dungeondraft-mcp; dungeondraft-ai-enhancement is the repository/workspace name.
 
 ## Tools and map workflow
 
-The server exposes 60 tools. Their MCP descriptions and input schemas are the
+The tools' MCP descriptions and input schemas are the
 parameter reference; call get_map_spec_schema for the generated planning schema.
 
 - Inspect map state, floors, elements and available assets.
@@ -182,6 +182,49 @@ Foundry itself. See the
 [Foundry export reference](.agents/skills/dungeondraft-foundry-export/references/foundry-vtt.md)
 for conversion details and verification checks.
 
+## Water, terrain and export settings
+
+These controls affect the active native floor and are exposed by bridge
+protocol 23. Check get_capabilities for their command names; older protocol-23
+bridges may not include them. Reload the mod and reconnect the MCP server after
+updating. Both setters participate in bridge undo/redo and reversible batches.
+
+| Tool | Settings |
+| --- | --- |
+| get_water_settings | Drawing defaults, existing region styles, border visibility and floor ID |
+| set_water_settings | deep_color, shallow_color, blend_distance, border, apply_to_existing |
+| get_terrain_settings | enabled, smooth_blending, expanded_slots (read only), floor ID |
+| set_terrain_settings | enabled, smooth_blending |
+| export_map | ppi, grid and lighting; omitted visibility options retain editor settings |
+
+For example, set_water_settings(deep_color="#235e7a",
+shallow_color="#5eaaa4", blend_distance=1.5, border=true) updates all existing
+filled water regions and future drawing defaults. It preserves polygon
+coordinates, holes and other topology. Omitted fields retain their values.
+Colors accept six hexadecimal RGB digits, optionally prefixed with #. The
+region data returned by get_water_settings uses native AARRGGBB strings;
+drawing defaults use #RRGGBB. Blend distance accepts 0..10 in native slider
+units, rather than pixels or feet.
+
+apply_to_existing=false changes only future drawing defaults (except border,
+which always applies to the whole floor). Defaults are session state; native
+maps persist the colors/blending of regions actually drawn. Reapply desired
+defaults after reopening before drawing additional water.
+
+set_terrain_settings(enabled=false) matches the Terrain Brush's Enabled option
+and preserves paint/textures. It does not activate or deactivate a toolbar
+tool. smooth_blending=true enables native terrain blending. Both persist in
+the native map. Texture selection/painting remains available through the
+existing terrain tools; arbitrary terrain RGB tint is not provided.
+
+For clean ship artwork, disable terrain and use export_map(grid=false,
+lighting=false). Export restores the previous grid and lighting switches.
+Terrain visibility remains as explicitly set until you change it or undo.
+Inspect the PNG alpha to verify transparency.
+On Dungeondraft 1.2.0.1, water over disabled terrain renders black. Use this
+transparent-export workflow for props/ships without water; keep terrain enabled
+when rendering ocean or river maps.
+
 ## Operational limits
 
 - A populated map cannot be replaced through open_map on Dungeondraft 1.2.0.1.
@@ -194,11 +237,21 @@ for conversion details and verification checks.
   alone does not establish that checkpoint.
 - Planner records belong to an editor instance and floor. After restarting,
   open the saved bundle's native map and use load_battlemap_project.
-  Manual terrain/water edits can conflict with planner ownership.
+  Manual terrain painting and water geometry edits can conflict with planner
+  ownership. Water colors/borders/blending and terrain visibility/smooth
+  blending can be styled independently; stale, unapplied plans still detect
+  appearance changes. Saved projects retain the current appearance.
 - revise_battlemap replaces complete named features. Review its default dry
   run and retain the new plan ID.
 - Native exports are limited to 16 megapixels and 8192 pixels per side. Wait for
   completion before editing.
+- For transparent assets, call set_terrain_settings(enabled=false), then
+  export_map(grid=false, lighting=false). PNG output alone does not guarantee
+  transparency: inspect alpha, and check for water or other background artwork.
+- Water drawing defaults are session settings. Existing filled regions retain
+  their own colors and blending in the native map. Use set_water_settings with
+  its default apply_to_existing=true to restyle existing water; inspect
+  get_water_settings and a fresh render to verify the result.
 - export_battlemap requires a validated applied/restored project on a
   single-level map and a new output directory. Supply the intended relative
   Foundry PNG path. It writes files; it does not import a Foundry scene.
@@ -319,6 +372,16 @@ after ordinary source edits.
 Godot 3 GDScript has no try/catch. Validate native API inputs; unhandled handler
 errors can stop the bridge. Parse the full script with a Godot 3-compatible
 parser before reloading changed GDScript.
+
+Run the Python regression checks from the repository root:
+
+~~~powershell
+.\.venv\Scripts\python.exe -m unittest discover -s server/tests -v
+~~~
+
+These check tool schemas, option forwarding and project ownership/persistence.
+They do not replace native rendering, undo/redo and save/reopen checks in a
+disposable Dungeondraft map.
 
 Maintained by Filip Smyczek. Forked from Brandon Florian's MIT-licensed
 Dungeondraft MCP project; the original copyright notice remains in [LICENSE](LICENSE).

@@ -25,6 +25,15 @@ def owned_elements(manifest):
     ]
 
 
+def terrain_content(surface):
+    """Keep paint/texture ownership strict, allowing independent appearance edits.
+
+    Older protocol-23 project bundles omit terrain_settings. The existing paint
+    hash remains stable; full settings are kept in context and saved projects.
+    """
+    return {k: v for k, v in surface.items() if k != "terrain_settings"}
+
+
 def validate(plan, manifest, context, surface=None):
     live = {e["id"]: e for e in context["content"]["elements"]}
     findings, owned, actual, obstacles = [], set(), [], []
@@ -231,7 +240,7 @@ def validate(plan, manifest, context, surface=None):
                 finding(
                     "count", fid, f"expected {expected} owned objects, found {found}"
                 )
-    if surface and context.get("surface") != surface:
+    if surface and terrain_content(context.get("surface", {})) != terrain_content(surface):
         finding(
             "terrain_changed",
             "map",

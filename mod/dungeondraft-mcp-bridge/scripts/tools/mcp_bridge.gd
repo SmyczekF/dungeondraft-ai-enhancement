@@ -176,6 +176,10 @@ func _record_and_dispatch(req : Dictionary) -> Dictionary:
 		return _err("a batch is active; inspect or cancel it before other edits")
 
 	var pre = null
+	if cmd == "set_water_settings" and Global.World.GetCurrentLevel() != null:
+		pre = _water_settings_snapshot()
+	if cmd == "set_terrain_settings" and Global.World.GetCurrentLevel() != null:
+		pre = _terrain_settings_data()
 	if cmd == "delete_object":
 		var node = _resolve(req)
 		if node != null and node.get_parent() == Global.World.GetCurrentLevel().Objects:
@@ -208,7 +212,7 @@ func _record_and_dispatch(req : Dictionary) -> Dictionary:
 			op["level_id"] = Global.World.GetCurrentLevel().ID
 			_undo_stack.append(op)
 			_redo_stack = []   # a fresh edit invalidates the redo branch
-		if cmd in CREATE_CMDS or cmd in TRANSFORM_CMDS or cmd in TERRAIN_CMDS or cmd in CAVE_CMDS or cmd in ["draw_water", "delete_object"] or cmd in ["delete_element", "place_pattern", "build_room", "set_terrain_slot", "add_level", "undo", "redo"]:
+		if cmd in CREATE_CMDS or cmd in TRANSFORM_CMDS or cmd in TERRAIN_CMDS or cmd in CAVE_CMDS or cmd in ["draw_water", "delete_object", "set_water_settings", "set_terrain_settings"] or cmd in ["delete_element", "place_pattern", "build_room", "set_terrain_slot", "add_level", "undo", "redo"]:
 			if op == null and not cmd in ["undo", "redo"]:
 				_unrecorded_revision += 1
 	return result
@@ -228,6 +232,10 @@ func _build_op(cmd, req, result, pre, terrain_before, cave_before = null, water_
 	elif cmd == "delete_object" and pre != null:
 		pre["node"] = null
 		return pre
+	elif cmd == "set_water_settings" and pre != null:
+		return {"kind": "water_settings", "before": pre, "after": _water_settings_snapshot()}
+	elif cmd == "set_terrain_settings" and pre != null:
+		return {"kind": "terrain_settings", "before": pre, "after": _terrain_settings_data()}
 	elif cmd in TRANSFORM_CMDS and pre != null:
 		var node = Global.World.GetNodeByID(int(req["id"]))
 		if node != null:
@@ -328,6 +336,10 @@ func _apply_op(op, undo : bool) -> bool:
 				mesh.DrawPolygon(op["points"], true)
 		"terrain":
 			_restore_splat(op["before"] if undo else op["after"])
+		"terrain_settings":
+			_apply_terrain_settings(op["before"] if undo else op["after"])
+		"water_settings":
+			_restore_water_settings(op["before"] if undo else op["after"])
 		"cave":
 			_restore_cave(op["before"] if undo else op["after"])
 	return true
@@ -385,7 +397,7 @@ func _terrain_snapshot() -> Dictionary:
 	var textures := []
 	for i in range(terrain.textures.size()):
 		textures.append(terrain.GetTexture(i))
-	return {"image": terrain.CloneSplatImage(), "image2": terrain.CloneSplatImage2() if terrain.ExpandedSlots else null, "textures": textures}
+	return {"image": terrain.CloneSplatImage(), "image2": terrain.CloneSplatImage2() if terrain.ExpandedSlots else null, "textures": textures, "settings": _terrain_settings_data()}
 
 
 func _restore_splat(snapshot):
@@ -399,6 +411,8 @@ func _restore_splat(snapshot):
 	else:
 		terrain.RestoreSplat(snapshot["image"])
 	terrain.UpdateSplat()
+	if snapshot.has("settings"):
+		_apply_terrain_settings(snapshot["settings"])
 
 
 # Deep-copy the cave BitMap for the undo stack (Resource.duplicate(true) so the
@@ -457,6 +471,10 @@ func _safe_dispatch(req : Dictionary) -> Dictionary:
 			return _ok({"exporting": bool(_master().get("IsExporting")), "managed_export": not _export_state.empty(), "grid": Global.Editor.GridToggle.pressed, "lighting": Global.Editor.LightingToggle.pressed})
 		"delete_object": return _delete_object(req)
 		"get_water": return _ok({"level_id": Global.World.GetCurrentLevel().ID, "data": Global.World.GetCurrentLevel().WaterMesh.Save()})
+		"get_water_settings": return _get_water_settings()
+		"set_water_settings": return _set_water_settings(req)
+		"get_terrain_settings": return _get_terrain_settings()
+		"set_terrain_settings": return _set_terrain_settings(req)
 		"ping": return _ok({ "pong": true, "protocol": PROTOCOL_VERSION, "bridge_instance": _instance_id, "engine": Engine.get_version_info() })
 		"get_status": return _get_status()
 		"get_map_info": return _get_map_info()
@@ -524,6 +542,7 @@ const ASSET_CATEGORIES := [
 	"Simple Tiles", "Smart Tiles", "Smart Tiles Double",
 ]
 const SUPPORTED_COMMANDS := [
+	"get_water_settings", "set_water_settings", "get_terrain_settings", "set_terrain_settings",
 	"ping", "get_status", "get_map_info", "get_capabilities", "refresh_asset_catalog",
 	"list_asset_categories", "list_assets", "list_asset_metadata", "list_elements", "get_element", "get_water", "get_surface_state", "get_export_status", "list_levels",
 	"apply_batch", "get_batch", "cancel_batch", "open_map", "save_map", "confirm_save", "place_object", "draw_wall", "draw_path", "add_light",
@@ -1852,7 +1871,7 @@ func _surface_state() -> Dictionary:
 		var texture = terrain.GetTexture(i)
 		paths.append(texture.resource_path if texture != null else "")
 	context.update(JSON.print(paths).to_utf8())
-	return _ok({"terrain_sha256": context.finish().hex_encode(), "textures": paths, "level_id": Global.World.GetCurrentLevel().ID})
+	return _ok({"terrain_sha256": context.finish().hex_encode(), "textures": paths, "level_id": Global.World.GetCurrentLevel().ID, "terrain_settings": _terrain_settings_data()})
 
 
 func _delete_object(req : Dictionary) -> Dictionary:
@@ -2284,6 +2303,8 @@ const MAX_BATCH_JOBS := 64
 const BATCH_OPERATIONS_PER_FRAME := 4
 const BATCH_FRAME_BUDGET_USEC := 8000
 const BATCH_FIELDS := {
+	"set_water_settings": ["cmd", "deep_color", "shallow_color", "blend_distance", "border", "apply_to_existing"],
+	"set_terrain_settings": ["cmd", "enabled", "smooth_blending"],
 	"move_element": ["cmd", "id", "x", "y"],
 	"modify_object": ["cmd", "id", "asset", "scale", "rotation", "shadow", "color", "layer"],
 	"delete_object": ["cmd", "id"],
@@ -2299,7 +2320,7 @@ const BATCH_FIELDS := {
 	"paint_path": ["cmd", "slot", "asset", "points", "radius", "rate"],
 }
 const BATCH_CATEGORIES := {"place_object": "Objects", "draw_wall": "Walls", "draw_path": "Paths", "add_light": "Lights", "add_portal": "Portals", "fill_terrain": "Terrain", "paint_terrain": "Terrain", "paint_path": "Terrain"}
-const BATCH_READ_COMMANDS := ["get_export_status", "ping", "get_status", "get_map_info", "get_capabilities", "list_assets", "list_asset_metadata", "list_asset_categories", "list_elements", "get_element", "get_water", "list_levels", "get_camera", "apply_batch", "get_batch", "cancel_batch"]
+const BATCH_READ_COMMANDS := ["get_water_settings", "get_terrain_settings", "get_surface_state", "get_export_status", "ping", "get_status", "get_map_info", "get_capabilities", "list_assets", "list_asset_metadata", "list_asset_categories", "list_elements", "get_element", "get_water", "list_levels", "get_camera", "apply_batch", "get_batch", "cancel_batch"]
 var _batch_jobs := {}
 var _batch_keys := {}
 var _active_batch := ""
@@ -2329,6 +2350,8 @@ func _batch_validate(op) -> Array:
 	for field in op:
 		if not field in BATCH_FIELDS[cmd]:
 			errors.append("unknown field: " + str(field))
+	if cmd in ["set_water_settings", "set_terrain_settings"]:
+		return errors + _settings_errors(op, cmd)
 	if cmd in ["place_object", "add_light", "add_portal", "paint_terrain", "move_element"]:
 		if not _batch_point([op.get("x"), op.get("y")]):
 			errors.append("x/y must be finite coordinates within the map")
@@ -2465,7 +2488,7 @@ func _apply_batch(req : Dictionary) -> Dictionary:
 	for i in range(ops.size()):
 		if typeof(ops[i]) == TYPE_DICTIONARY and ops[i].get("cmd") in TERRAIN_CMDS:
 			terrain_count += 1
-		if typeof(ops[i]) == TYPE_DICTIONARY and ops[i].get("cmd") == "draw_water":
+		if typeof(ops[i]) == TYPE_DICTIONARY and ops[i].get("cmd") in ["draw_water", "set_water_settings"]:
 			water_count += 1
 		for message in _batch_validate(ops[i]):
 			errors.append({"index": i, "error": message})
@@ -2576,6 +2599,153 @@ func _draw_water(req : Dictionary) -> Dictionary:
 	var mesh = Global.World.GetCurrentLevel().WaterMesh
 	mesh.DrawPolygon(_points(req["points"]), bool(req.get("erase", false)))
 	return _ok({"water_added": not bool(req.get("erase", false)), "point_count": req["points"].size()})
+
+
+# Appearance settings are separate from geometry and brush activation. Native
+# WaterMesh colors are drawing defaults; existing regions store their own colors.
+func _settings_errors(req : Dictionary, cmd : String) -> Array:
+	var errors := []
+	var fields = ["deep_color", "shallow_color", "blend_distance", "border"] if cmd == "set_water_settings" else ["enabled", "smooth_blending"]
+	var supplied = false
+	for field in fields:
+		if req.has(field): supplied = true
+	if not supplied: errors.append("supply at least one appearance setting")
+	for field in ["enabled", "smooth_blending", "border", "apply_to_existing"]:
+		if req.has(field) and typeof(req[field]) != TYPE_BOOL:
+			errors.append(field + " must be boolean")
+	for field in ["deep_color", "shallow_color"]:
+		if req.has(field):
+			var value = req[field]
+			var valid = typeof(value) == TYPE_STRING
+			if valid:
+				var hex = value.trim_prefix("#").to_lower()
+				valid = hex.length() == 6
+				for i in range(hex.length()):
+					if "0123456789abcdef".find(hex.substr(i, 1)) == -1: valid = false
+			if not valid: errors.append(field + " must be a six-digit #RRGGBB color")
+	if req.has("blend_distance") and not _batch_number(req["blend_distance"], 0, 10):
+		errors.append("blend_distance must be finite and in 0..10 native slider units")
+	return errors
+
+
+func _terrain_settings_data() -> Dictionary:
+	var terrain = Global.World.GetCurrentLevel().Terrain
+	return {"enabled": terrain.visible, "smooth_blending": terrain.SmoothBlending, "expanded_slots": terrain.ExpandedSlots}
+
+
+func _get_terrain_settings() -> Dictionary:
+	if Global.World.GetCurrentLevel() == null: return _err("no map open")
+	var data = _terrain_settings_data()
+	data["level_id"] = Global.World.GetCurrentLevel().ID
+	return _ok(data)
+
+
+func _apply_terrain_settings(data : Dictionary):
+	var terrain = Global.World.GetCurrentLevel().Terrain
+	var brush = Global.Editor.Tools["TerrainBrush"]
+	brush.SetEnabled(data["enabled"])
+	terrain.visible = data["enabled"]
+	brush.SetSmoothBlending(data["smooth_blending"])
+	terrain.SetSmoothBlending(data["smooth_blending"])
+
+
+func _set_terrain_settings(req : Dictionary) -> Dictionary:
+	if Global.World.GetCurrentLevel() == null: return _err("no map open")
+	var errors = _batch_validate(req)
+	if not errors.empty(): return _err(JSON.print(errors))
+	var data = _terrain_settings_data()
+	for field in ["enabled", "smooth_blending"]:
+		if req.has(field): data[field] = req[field]
+	_apply_terrain_settings(data)
+	return _get_terrain_settings()
+
+
+func _water_defaults(with_alpha : bool = false) -> Dictionary:
+	var mesh = Global.World.GetCurrentLevel().WaterMesh
+	return {"deep_color": "#" + mesh.DeepColor.to_html(with_alpha), "shallow_color": "#" + mesh.ShallowColor.to_html(with_alpha), "blend_distance": mesh.BlendDistance}
+
+
+func _set_water_defaults(data : Dictionary):
+	var mesh = Global.World.GetCurrentLevel().WaterMesh
+	mesh.DeepColor = Color(data["deep_color"])
+	mesh.ShallowColor = Color(data["shallow_color"])
+	mesh.BlendDistance = data["blend_distance"]
+
+
+func _water_settings_snapshot() -> Dictionary:
+	return {"data": Global.World.GetCurrentLevel().WaterMesh.Save().duplicate(true), "defaults": _water_defaults(true)}
+
+
+func _restore_water_settings(snapshot : Dictionary, restore_regions : bool = true):
+	var mesh = Global.World.GetCurrentLevel().WaterMesh
+	if restore_regions and snapshot["data"].has("tree"):
+		mesh.Load(snapshot["data"].duplicate(true))
+	Global.Editor.Tools["WaterBrush"].SetDisableBorder(snapshot["data"].get("disable_border", false))
+	_set_water_defaults(snapshot["defaults"])
+
+
+# Save/Load dictionaries retain native PoolVector2Array geometry. Never convert
+# polygon coordinates through strings or reconstruct regions to change styling.
+# The root is depth 0, filled regions have odd depth, and holes have even depth.
+func _water_regions(node : Dictionary, path : Array, regions : Array):
+	if path.size() % 2 == 1 and not node.get("is_open", false):
+		regions.append({"tree_path": path.duplicate(), "deep_color": node.get("deep_color"), "shallow_color": node.get("shallow_color"), "blend_distance": node.get("blend_distance")})
+	var children = node.get("children", [])
+	for i in range(children.size()):
+		_water_regions(children[i], path + [i], regions)
+
+
+func _recolor_water(node : Dictionary, depth : int, req : Dictionary):
+	if depth % 2 == 1 and not node.get("is_open", false):
+		for field in ["deep_color", "shallow_color"]:
+			if req.has(field):
+				# Dungeondraft native serialization uses AARRGGBB, not RRGGBBAA.
+				node[field] = "ff" + req[field].trim_prefix("#").to_lower()
+		if req.has("blend_distance"): node["blend_distance"] = float(req["blend_distance"])
+	for child in node.get("children", []):
+		_recolor_water(child, depth + 1, req)
+
+
+func _water_geometry(value):
+	if typeof(value) == TYPE_DICTIONARY:
+		var result := {}
+		for key in value:
+			if not key in ["ref", "deep_color", "shallow_color", "blend_distance", "disable_border"]:
+				result[key] = _water_geometry(value[key])
+		return result
+	if typeof(value) == TYPE_ARRAY:
+		var result := []
+		for item in value: result.append(_water_geometry(item))
+		return result
+	return value
+
+
+func _get_water_settings() -> Dictionary:
+	if Global.World.GetCurrentLevel() == null: return _err("no map open")
+	var saved = Global.World.GetCurrentLevel().WaterMesh.Save()
+	var regions := []
+	if saved.has("tree"): _water_regions(saved["tree"], [], regions)
+	return _ok({"level_id": Global.World.GetCurrentLevel().ID, "defaults": _water_defaults(), "border": not saved.get("disable_border", false), "regions": regions, "region_color_format": "AARRGGBB"})
+
+
+func _set_water_settings(req : Dictionary) -> Dictionary:
+	if Global.World.GetCurrentLevel() == null: return _err("no map open")
+	var errors = _batch_validate(req)
+	if not errors.empty(): return _err(JSON.print(errors))
+	var before = _water_settings_snapshot()
+	var snapshot = before.duplicate(true)
+	for field in ["deep_color", "shallow_color", "blend_distance"]:
+		if req.has(field): snapshot["defaults"][field] = req[field]
+	if req.get("apply_to_existing", true) and snapshot["data"].has("tree"):
+		_recolor_water(snapshot["data"]["tree"], 0, req)
+	if req.has("border"): snapshot["data"]["disable_border"] = not req["border"]
+	var restyle = req.get("apply_to_existing", true) and (req.has("deep_color") or req.has("shallow_color") or req.has("blend_distance"))
+	_restore_water_settings(snapshot, restyle)
+	var after = Global.World.GetCurrentLevel().WaterMesh.Save()
+	if JSON.print(_batch_canonical(_water_geometry(before["data"]))) != JSON.print(_batch_canonical(_water_geometry(after))):
+		_restore_water_settings(before)
+		return _err("water geometry changed during styling; restored the previous snapshot")
+	return _get_water_settings()
 
 
 func _batch_polygon(points) -> bool:

@@ -118,8 +118,10 @@ def save_project(planner, plan_id, directory):
     preview = render(planner.bridge, plan["spec"], root / "preview.png")
     context = planner.context()
     ownership = {
-        "surface": record["surface"],
-        "water": record["water"],
+        # Validation above verifies geometry/paint ownership. Persist the actual
+        # appearance, including styling performed since this plan was applied.
+        "surface": context["surface"],
+        "water": context["content"]["water"],
         "bridge_instance": context["bridge_instance"],
         "level_id": context["content"]["level_id"],
     }
@@ -230,7 +232,15 @@ def load_project(planner, directory):
     from .validation import validate
 
     report = validate(plan, manifest, context, ownership["surface"])
-    if not report["valid"] or context["content"]["water"] != ownership["water"]:
+    saved_settings = ownership["surface"].get("terrain_settings")
+    if (
+        not report["valid"]
+        or context["content"]["water"] != ownership["water"]
+        or (
+            saved_settings is not None
+            and context["surface"].get("terrain_settings") != saved_settings
+        )
+    ):
         raise BridgeError(
             "project ownership does not match the open map; no planning data adopted"
         )
