@@ -21,7 +21,9 @@ from typing import Optional
 from mcp.server.mcpserver import MCPServer, Image
 from mcp.server.mcpserver.exceptions import ToolError
 
+from . import __version__
 from .bridge_client import BridgeClient, BridgeError
+from .editor_lifecycle import EditorLifecycle, native_path
 from .layout.planning import Planner
 from .layout.spec import MapSpec
 
@@ -30,6 +32,7 @@ PORT = int(os.environ.get("DD_BRIDGE_PORT", "8787"))
 
 mcp = MCPServer(
     "dungeondraft",
+    version=__version__,
     instructions=(
         "Controls the map open in the local Dungeondraft editor. Call ping first, "
         "then get_status; map editing requires map_open=true. Coordinates are "
@@ -81,33 +84,8 @@ def _wait_for_native_json(path: Path, previous_mtime_ns: int | None, timeout: fl
     raise BridgeError(f"native map did not finish saving within {timeout:.0f}s ({path}): {last_error}")
 
 
-def _wait_for_map(*, previous_instance: str, path: str, timeout: float = 90.0) -> dict:
-    """Wait through Dungeondraft's scene/mod reload and return the ready map."""
-    deadline = time.monotonic() + timeout
-    last_error = "map did not become ready"
-    while time.monotonic() < deadline:
-        try:
-            info = bridge.request("get_map_info")
-            if info.get("map_open") and not info.get("loading") and info.get("bridge_instance") != previous_instance:
-                if path is not None and os.path.normcase(info.get("path", "")) != os.path.normcase(path):
-                    last_error = f"loaded unexpected path: {info.get('path')}"
-                else:
-                    return info
-        except BridgeError as exc:
-            last_error = str(exc)
-        time.sleep(0.4)
-    raise BridgeError(f"Dungeondraft map load timed out: {last_error}")
-
-
 def _native_path(path: str, *, must_exist: bool = False) -> Path:
-    target = Path(path)
-    if not target.is_absolute() or target.suffix.lower() != ".dungeondraft_map":
-        raise BridgeError("path must be an absolute .dungeondraft_map file")
-    if must_exist and not target.is_file():
-        raise BridgeError(f"map file does not exist: {target}")
-    if not target.parent.is_dir():
-        raise BridgeError(f"destination directory does not exist: {target.parent}")
-    return target
+    return native_path(path, must_exist=must_exist)
 
 
 # --------------------------------------------------------------------------
@@ -142,16 +120,50 @@ def get_capabilities() -> dict:
 
 
 @mcp.tool()
-def open_map(path: str, discard_current: bool = False) -> dict:
-    """Open a native map from an empty current map with discard_current=true.
+def open_map(path: str, discard_current: bool = False, save_current_path: str = "") -> dict:
+    """Open/reopen a native map by saving and restarting the local Windows editor.
 
-    Populated replacement is rejected; save and restart the editor with the
-    target file through the external launcher to avoid native cleanup errors.
+    Handles populated maps without native scene replacement. Saves the current
+    file before stopping its identified process; for an untitled map supply a
+    new save_current_path or explicitly discard_current=True. Unsaved edits,
+    active jobs and incomplete saves block shutdown. Readiness verifies the
+    new process, bridge instance, native path and dimensions. Planner ownership
+    must be restored from a saved project after restart. With no running editor,
+    uses DD_EDITOR_EXECUTABLE (default Program Files/Dungeondraft/Dungeondraft.exe).
     """
-    target = _native_path(path, must_exist=True)
-    previous_instance = bridge.request("get_map_info")["bridge_instance"]
-    bridge.request("open_map", path=str(target), discard_current=discard_current)
-    return _wait_for_map(previous_instance=previous_instance, path=str(target))
+    return editor.open(path, discard_current=discard_current, save_current_path=save_current_path)
+
+
+@mcp.tool()
+def reopen_map() -> dict:
+    """Save and restart the current named map; verifies the reopened native file."""
+    info = bridge.request("get_map_info")
+    return editor.open(info.get("path", ""))
+
+
+@mcp.tool()
+def resize_map(width: int, height: int) -> dict:
+    """Resize a blank single-level bootstrap map to 1..200 tiles per side.
+
+    Rejects content, water, cave, tile and terrain edits, active jobs and busy
+    saves/exports. This native operation clears history and is not undoable.
+    Save the resized map afterwards; populated-map resizing is unsupported.
+    """
+    return bridge.request("resize_map", width=width, height=height)
+
+
+@mcp.tool()
+def create_map(width: int, height: int, path: str, bootstrap_path: str = "", save_current_path: str = "") -> dict:
+    """Create a new native map by launching a blank template, resizing and saving.
+
+    path must be a new absolute .dungeondraft_map file in an existing directory.
+    Supply an existing blank bootstrap_path, or configure DD_BOOTSTRAP_MAP once.
+    Preserves the template and saves the current map before restarting. Supply
+    save_current_path for an untitled current map. Returns only after native JSON,
+    bridge readiness and requested dimensions are verified. On failure retains
+    the destination and reports its path; inspect it before retrying.
+    """
+    return editor.create(width, height, path, bootstrap_path=bootstrap_path, save_current_path=save_current_path)
 
 
 @mcp.tool()
@@ -177,6 +189,9 @@ def save_map(path: str = "", overwrite: bool = False) -> dict:
     _wait_for_native_json(target, previous_mtime_ns)
     bridge.request("confirm_save", save_token=pending["save_token"])
     return {"path": str(target), "bytes": target.stat().st_size, "valid_native_json": True}
+
+
+editor = EditorLifecycle(bridge, lambda **kwargs: save_map(**kwargs))
 
 
 BATCH_TERMINAL = {"completed", "cancelled", "failed", "failed_partial"}

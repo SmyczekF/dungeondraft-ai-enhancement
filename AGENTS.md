@@ -36,8 +36,12 @@ This repository is a map-creation workspace containing the Python MCP server and
   restart; reopen the bundle native map before load_battlemap_project.
 - Manual terrain/water edits can invalidate ownership. Named revisions replace
   complete features; inspect the default dry run and retain the new plan ID.
-- open_map only replaces an empty map with discard_current=true. For populated
-  maps, save and restart the editor with the intended native file.
+- Python open_map/reopen_map save and restart only the identified local editor
+  process; readiness checks the new instance, PID, native path and dimensions.
+  The low-level bridge open_map guard still rejects populated scene replacement.
+- create_map launches a blank native bootstrap, resizes and saves a new path.
+  resize_map is limited to blank single-level maps; it clears history. Preserve
+  untitled work with save_current_path and never discard unrelated work.
 - Wait for save/export completion before reopening or editing. Exports are
   bounded to 16 megapixels and 8192 pixels per side.
 - VTT export requires a validated single-level project and a new directory.

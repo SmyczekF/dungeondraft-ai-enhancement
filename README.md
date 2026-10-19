@@ -2,8 +2,14 @@
 
 A workspace for building Dungeondraft maps with AI, backed by an MCP server.
 The server lets an AI client inspect and edit a running Dungeondraft
-map. Version 0.7.1 targets Dungeondraft 1.2.0.1 on Windows, using Godot 3.4.2
+map. Version 1.0.0 targets Dungeondraft 1.2.0.1 on Windows, using Godot 3.4.2
 and bridge protocol 23.
+
+The Python MCP server and bridge mod share release version **1.0.0**. The
+transport protocol remains **23**: the lifecycle additions preserve its JSON
+format and existing commands. MCP initialization reports server version 1.0.0;
+bridge `ping` and `get_capabilities` report `bridge_version: "1.0.0"` separately
+from `protocol: 23`.
 
 The Python server communicates with the client over MCP stdio. The
 Dungeondraft mod receives commands over localhost TCP at 127.0.0.1:8787.
@@ -51,6 +57,8 @@ registering the server or changing tool definitions.
 Call ping, then get_status, then get_capabilities.
 
 - ping must report pong and protocol 23.
+- For this release, ping must also report bridge_version: "1.0.0". A different
+  release version means the editor is still running an older bridge.
 - get_status must report map_open: true; it also provides map size and center.
 - get_capabilities reports supported commands, batch limits, engine version,
   active mods and asset catalog version.
@@ -102,7 +110,8 @@ parameter reference; call get_map_spec_schema for the generated planning schema.
 
 For a complete encounter:
 
-1. Load a map with suitable dimensions.
+1. Use create_map with a blank native template and suitable dimensions, or
+   open_map for an existing native map.
 2. Discover assets using list_asset_categories, list_assets or list_asset_metadata.
 3. Call plan_battlemap with a specification in tiles. Review errors, warnings,
    resolved artwork and route checks before calling apply_battlemap.
@@ -225,14 +234,79 @@ On Dungeondraft 1.2.0.1, water over disabled terrain renders black. Use this
 transparent-export workflow for props/ships without water; keep terrain enabled
 when rendering ocean or river maps.
 
+## Editor lifecycle (Windows)
+
+Version 1.0.0 adds automatic map creation and resizing, and replaces the public
+open-map workflow with verified process restarts:
+
+| MCP tool | Behavior |
+| --- | --- |
+| `open_map(path, discard_current=False, save_current_path="")` | Save the current map and launch the requested native file in a fresh editor process; also starts a closed editor. |
+| `reopen_map()` | Save and reopen the current named map in a fresh process. |
+| `resize_map(width, height)` | Resize a blank single-level map to integer tile dimensions in 1..200; clears history and needs a subsequent save. |
+| `create_map(width, height, path, bootstrap_path="", save_current_path="")` | Copy a blank template to a new native path, launch it, resize and save it, then verify readiness and dimensions. |
+
+Set `DD_BOOTSTRAP_MAP` in the MCP server environment to an absolute blank native
+file to use `create_map(width, height, path)` with three arguments. Alternatively,
+pass `bootstrap_path` each time. The destination directory must already exist.
+For example, these are MCP tool calls after configuring the bootstrap:
+
+~~~text
+create_map(width=30, height=22, path="C:/maps/encounter/map.dungeondraft_map")
+reopen_map()
+~~~
+
+After upgrading, restart the Python MCP server to discover the new tools and
+restart Dungeondraft with a map loaded to activate the new bridge version.
+On Windows, stop the active MCP server before reinstalling the Python package
+to refresh installed version metadata; its running console executable is locked.
+
+`open_map(path)` saves the current map, stops only the process identified as the
+local bridge listener, launches Dungeondraft with the target native file and
+waits for the new process, bridge instance, path and dimensions. `reopen_map()`
+does the same for the current named map. This avoids the unsafe populated-scene
+teardown in Dungeondraft 1.2.0.1. After verifying the save and idle state, the
+controller terminates that process through its Windows kernel handle; it does
+not use native scene replacement or stop every process with the same name.
+Active batches/exports and unfinished saves prevent restart. For an untitled
+map supply a new `save_current_path`; `discard_current=True` explicitly skips
+saving and should only be used when discarding that map is intended.
+
+`create_map(width, height, path, bootstrap_path=...)` copies a blank native map
+to a **new** destination, preserves/saves the current map, launches the copy,
+resizes it and verifies the native save. Configure `DD_BOOTSTRAP_MAP` to omit the
+template argument. Prepare that template once by saving a blank map in
+`dd-maps/<bootstrap-slug>/`. It must contain one level, default unpainted terrain,
+and no elements, water, caves, tiles or building shapes. Direct `resize_map`
+supports only those blank maps, accepts 1..200 tiles per side and clears history.
+Save after direct resizing. Creating encounter artwork still starts with the
+skill's concept preview; disposable lifecycle tests do not require concept art.
+
+With no running editor, set `DD_EDITOR_EXECUTABLE` if the executable is outside
+`C:/Program Files/Dungeondraft/Dungeondraft.exe`. With a reachable bridge the
+controller discovers the executable from its process. If an editor is running
+but its bridge is unreachable, enable MCP Bridge and load a map manually;
+the controller leaves that process alone. Lifecycle currently supports only a
+local Windows editor. Startup failures retain the target file and leave a
+launched editor running for inspection; do not blindly repeat a timed-out call.
+The current startup output is stored beside the native map as `.editor.log`;
+startup errors report the exit code and log path.
+
+Release verification passed 33 automated regression tests and live checks of
+opening, reopening populated maps, resizing blank maps, creating requested
+dimensions, startup from a closed editor, and water-color refresh without
+reopening. Invalid dimensions and populated/painted resize attempts were rejected.
+One editor process exited during startup in the live tests; subsequent starts
+passed, but the cause remains unresolved. Startup failures are reported without
+automatic retries; inspect the retained map and startup log before retrying.
+
 ## Operational limits
 
-- A populated map cannot be replaced through open_map on Dungeondraft 1.2.0.1.
-  Save and close the editor, then launch it with the intended map. open_map
-  requires an empty current map across all floors and discard_current=true.
-  Arbitrary new dimensions require native creation or a prepared template.
-- save_map validates native JSON without reopening the scene. Before an
-  empty-map reopen, wait for the native save notification to disappear.
+- The low-level bridge open_map still rejects populated native replacement.
+  The public Python open_map uses the verified save/restart workflow above.
+  Populated-map resizing remains unsupported.
+- save_map validates native JSON without reopening the scene. Wait for native
+  save/export completion before other lifecycle operations.
   bridge_dirty reflects the bridge's verified save checkpoint; UI saving
   alone does not establish that checkpoint.
 - Planner records belong to an editor instance and floor. After restarting,

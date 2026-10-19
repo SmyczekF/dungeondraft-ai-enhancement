@@ -21,6 +21,7 @@ var script_class = "tool"
 
 const HOST := "127.0.0.1"
 const PORT := 8787
+const BRIDGE_VERSION := "1.0.0"
 const PROTOCOL_VERSION := 23
 const MAX_REQUEST_BYTES := 1048576
 const LISTENER_KEY := "dungeondraft_mcp.bridge_listener"
@@ -475,13 +476,14 @@ func _safe_dispatch(req : Dictionary) -> Dictionary:
 		"set_water_settings": return _set_water_settings(req)
 		"get_terrain_settings": return _get_terrain_settings()
 		"set_terrain_settings": return _set_terrain_settings(req)
-		"ping": return _ok({ "pong": true, "protocol": PROTOCOL_VERSION, "bridge_instance": _instance_id, "engine": Engine.get_version_info() })
+		"ping": return _ok({ "pong": true, "protocol": PROTOCOL_VERSION, "bridge_version": BRIDGE_VERSION, "bridge_instance": _instance_id, "engine": Engine.get_version_info() })
 		"get_status": return _get_status()
 		"get_map_info": return _get_map_info()
 		"get_capabilities": return _get_capabilities()
 		"refresh_asset_catalog": return _refresh_asset_catalog()
 		"list_asset_metadata": return _list_asset_metadata(req)
 		"open_map": return _open_map(req)
+		"resize_map": return _resize_map(req)
 		"save_map": return _save_map(req)
 		"confirm_save": return _confirm_save(req)
 		"apply_batch": return _apply_batch(req)
@@ -545,7 +547,7 @@ const SUPPORTED_COMMANDS := [
 	"get_water_settings", "set_water_settings", "get_terrain_settings", "set_terrain_settings",
 	"ping", "get_status", "get_map_info", "get_capabilities", "refresh_asset_catalog",
 	"list_asset_categories", "list_assets", "list_asset_metadata", "list_elements", "get_element", "get_water", "get_surface_state", "get_export_status", "list_levels",
-	"apply_batch", "get_batch", "cancel_batch", "open_map", "save_map", "confirm_save", "place_object", "draw_wall", "draw_path", "add_light",
+	"apply_batch", "get_batch", "cancel_batch", "open_map", "resize_map", "save_map", "confirm_save", "place_object", "draw_wall", "draw_path", "add_light",
 	"add_portal", "add_roof", "add_text", "place_pattern", "build_room", "set_terrain_slot",
 	"fill_terrain", "fill_region", "draw_water", "paint_terrain", "paint_path", "dig_cave", "clear_caves",
 	"move_element", "modify_object", "duplicate_object", "delete_object", "delete_element", "add_level", "set_level",
@@ -597,7 +599,7 @@ func _get_capabilities() -> Dictionary:
 	var counts := {}
 	for category in ASSET_CATEGORIES:
 		counts[category] = _asset_catalog[category].size()
-	return _ok({"protocol": PROTOCOL_VERSION, "bridge_instance": _instance_id,
+	return _ok({"protocol": PROTOCOL_VERSION, "bridge_version": BRIDGE_VERSION, "bridge_instance": _instance_id,
 		"engine": Engine.get_version_info(),
 		"commands": SUPPORTED_COMMANDS, "asset_catalog_version": _catalog_version,
 		"batch": {"schema_version": BATCH_SCHEMA_VERSION, "commands": BATCH_FIELDS.keys(), "max_operations": MAX_BATCH_OPERATIONS, "max_jobs": MAX_BATCH_JOBS, "max_request_bytes": MAX_REQUEST_BYTES, "operations_per_frame": BATCH_OPERATIONS_PER_FRAME, "frame_budget_usec": BATCH_FRAME_BUDGET_USEC, "max_terrain_operations": 16, "max_water_operations": 16},
@@ -654,6 +656,9 @@ func _get_map_info() -> Dictionary:
 	var path = "" if current_file == null else str(current_file)
 	var master_node = _master()
 	var info := {"map_open": level != null, "path": path, "bridge_instance": _instance_id, "dirty": bool(master_node.get("IsModified")) or _state_signature() != _saved_state_signature, "editor_dirty": bool(master_node.get("IsModified")), "bridge_dirty": _state_signature() != _saved_state_signature, "exporting": bool(master_node.get("IsExporting")), "saving": bool(master_node.get("IsSaving")), "loading": bool(master_node.get("IsLoadingMap"))}
+	info["process_id"] = OS.get_process_id()
+	info["executable"] = OS.get_executable_path()
+	info["batch_active"] = _active_batch != ""
 	if level != null:
 		info["size_tiles"] = [int(Global.World.WoxelDimensions.x / 256), int(Global.World.WoxelDimensions.y / 256)]
 		info["size_woxels"] = _vec(Global.World.WoxelDimensions)
@@ -661,6 +666,71 @@ func _get_map_info() -> Dictionary:
 		info["level_index"] = Global.World.CurrentLevelId
 		info["level_count"] = Global.World.levels.size()
 	return _ok(info)
+
+
+# Inspect native serialized content, including surfaces absent from element counts.
+func _bootstrap_error() -> String:
+	if Global.World.GetCurrentLevel() == null or Global.World.levels.size() != 1:
+		return "resize_map requires a blank single-level bootstrap map"
+	var data = Global.World.GetCurrentLevel().Save()
+	for key in ["objects", "walls", "portals", "paths", "patterns", "lights", "texts", "materials"]:
+		if not data.get(key, []).empty():
+			return "resize_map rejects populated bootstrap maps: " + key
+	if not data.get("roofs", {}).get("roofs", []).empty():
+		return "resize_map rejects roofs"
+	for key in ["polygons", "walls"]:
+		if not data.get("shapes", {}).get(key, []).empty():
+			return "resize_map rejects building shapes"
+	if data.get("water", {}).has("tree"):
+		return "resize_map rejects water geometry"
+	var cave = data.get("cave", {})
+	for key in ["bitmap", "entrance_bitmap"]:
+		if not _bootstrap_pool(cave.get(key, ""), [0]):
+			return "resize_map rejects caves or unreadable cave data"
+	var terrain = data.get("terrain", {})
+	if not _bootstrap_pool(terrain.get("splat", ""), [255, 0, 0, 0]):
+		return "resize_map rejects terrain painting or unreadable terrain data"
+	if terrain.get("expand_slots", false):
+		return "resize_map requires the default four terrain slots"
+	if not _bootstrap_pool(data.get("tiles", {}).get("cells", ""), [-1]):
+		return "resize_map rejects tile painting or unreadable tile data"
+	return ""
+
+
+func _bootstrap_pool(value, expected : Array) -> bool:
+	# These strings come from Level.Save(), never from a client expression.
+	var values = str2var(value) if typeof(value) == TYPE_STRING and value != "" else value
+	if not typeof(values) in [TYPE_RAW_ARRAY, TYPE_INT_ARRAY]:
+		return false
+	if values.size() == 0 or values.size() % expected.size() != 0:
+		return false
+	for i in range(values.size()):
+		if int(values[i]) != expected[i % expected.size()]:
+			return false
+	return true
+
+
+func _resize_map(req : Dictionary) -> Dictionary:
+	for key in ["width", "height"]:
+		var value = req.get(key)
+		if not typeof(value) in [TYPE_INT, TYPE_REAL] or is_nan(float(value)) or is_inf(float(value)) or float(value) != floor(float(value)) or value < 1 or value > 200:
+			return _err(key + " must be an integer tile count in 1..200")
+	var master_node = _master()
+	if bool(master_node.get("IsBusy")) or bool(master_node.get("IsSaving")) or bool(master_node.get("IsLoadingMap")):
+		return _err("editor is busy; wait before resizing")
+	var reason = _bootstrap_error()
+	if reason != "":
+		return _err(reason)
+	if not master_node.has_method("ChangeMapSize"):
+		return _err("native ChangeMapSize is unavailable")
+	master_node.call("ChangeMapSize", 0, 0, int(req["width"]), int(req["height"]))
+	_undo_stack = []
+	_redo_stack = []
+	_unrecorded_revision += 1
+	var size := [int(Global.World.WoxelDimensions.x / 256), int(Global.World.WoxelDimensions.y / 256)]
+	if size != [int(req["width"]), int(req["height"])]:
+		return _err("native resize did not reach requested dimensions; inspect the map")
+	return _ok({"size_tiles": size, "size_woxels": _vec(Global.World.WoxelDimensions), "undoable": false})
 
 
 func _open_map(req : Dictionary) -> Dictionary:
