@@ -200,6 +200,72 @@ tiles. Export pixels per tile are a separate setting. Native floor IDs and list
 indices are different; resolve them with list_levels after loading a map.
 Drawing layers control order within a floor and do not create another floor.
 
+## Build map download packages
+
+For a completed encounter, run one command from the repository root:
+
+~~~powershell
+.\.venv\Scripts\python.exe -m dungeondraft_mcp.release .\dd-maps\my-encounter
+~~~
+
+The builder reads that encounter's `map-release.json`, preserves/opens its
+canonical native map with the existing lifecycle tools, optionally refreshes
+its corrected Foundry export, and writes three separate downloads in `release/`:
+
+| Download | Contents |
+| --- | --- |
+| `<slug>-gridded.zip` | Native PNGs with visible grids, one per floor, plus setup instructions. |
+| `<slug>-gridless.zip` | Gridless PNGs from the exact embedded Foundry backgrounds, plus setup instructions. |
+| `<slug>-foundry.zip` | Corrected Foundry 14 scenes, each bundled into one JSON with its image, walls, doors and lights; one JSON per floor, plus import/play instructions. |
+
+`RELEASE-NOTES.txt` contains a package summary and installation instructions.
+Loose image folders are provided for inspection; `build.json` records source
+and package hashes. Recipients do not need the native `.dungeondraft_map`,
+`.dd2vtt`, concept, manifests, asset catalogs or Python scripts. Asset-pack
+files are not part of these downloads. This command creates local files.
+
+Create this small configuration once per encounter (the map skill should keep
+it with the final map). Paths are relative to the encounter, and `native_label`
+must match the editor's floor label exactly; floor IDs may change after loading.
+For multiple floors, add a row and corrected scene JSON for each playable floor.
+
+~~~json
+{
+  "title": "Example Encounter",
+  "slug": "my-encounter",
+  "native_map": "map.dungeondraft_map",
+  "pixels_per_square": 128,
+  "foundry_exporter": "export-foundry.py",
+  "floors": [
+    {"name": "ground-floor", "native_label": "Ground", "scene": "foundry/foundry-scene.json"}
+  ]
+}
+~~~
+
+`foundry_exporter` is an optional **trusted encounter-local Python script**,
+executed with `--capture`. It owns map-specific corrections such as cave walls,
+windows, secret doors and locks, and must write `foundry/export.json` with
+`native_sha256` and either `scene_sha256` or per-floor `scene_sha256` entries
+under `floors`. If omitted, the builder packages the existing corrected scenes
+only when their hashes still match. Raw adapter output must first be finalized
+with the export skill; this builder does not infer secret doors from artwork.
+
+The current build format supports embedded-PNG Foundry 14 scenes, square grids
+at 5 feet per square, and one scene per floor. It validates dimensions, origin,
+resolution and source hashes, rejects stale/shifted scenes, and excludes internal
+ownership flags from public JSON. It does not create actors, automate terrain
+costs or stairs, or verify a live Foundry import. Existing ZIPs are replaced only
+after export and file validation finish; unrelated encounter files are preserved.
+The explicit command authorizes its configured build steps. Agents must still
+honor the workflow's concept/lifecycle/final-export checkpoints before running it.
+
+For image-only use, select the original PNG as your VTT background, use the
+documented pixels per square (128 here) and 5-foot distance, and keep its dimensions
+and origin unchanged. A gridded PNG normally needs the VTT's visible overlay hidden
+to avoid double grid lines; keep its mechanical grid for snapping/measurement.
+For prepared Foundry scenes, use the JSON import below rather than importing an
+image or raw `.dd2vtt`. See the [official scene guide](https://foundryvtt.com/article/scenes/).
+
 ## Import into Foundry VTT
 
 **Recommended: import the completed `foundry-scene.json` with Foundry's built-in
