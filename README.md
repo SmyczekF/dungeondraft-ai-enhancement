@@ -96,8 +96,11 @@ dungeondraft-mcp; dungeondraft-ai-enhancement is the repository/workspace name.
 
 ## Workflow preferences
 
-Edit [map-workflow.json](map-workflow.json) at the repository root to choose the
-workflow for both bundled skills. Agents read the same file from nested working
+Copy [map-workflow.example.json](map-workflow.example.json) to
+`map-workflow.json` at the repository root for first-time setup, then edit the
+local file to choose the workflow for both bundled skills. `map-workflow.json`
+is Git-ignored; only the example is shared. Preserve an existing local file when
+updating the repository. Agents read the same local file from nested working
 directories and user-wide skill installations. Explicit instructions in the
 current task override these defaults; this file is read by the agent through
 the skills, not automatically by the Python server.
@@ -118,8 +121,9 @@ the skills, not automatically by the Python server.
 | `enhancing` | Add fitting optional tactical, exploratory and decorative improvements within the brief. | Build the requested functional place without unsolicited extras. |
 | `export_to_foundry` | Include Foundry file delivery by default, using supported Foundry 14 unless another target is established. | Export to Foundry only on request or an established session requirement. |
 
-All values must be JSON booleans (`true`/`false`), not strings. A missing file or
-key uses the defaults shown above. Invalid values/unknown keys are reported;
+All values must be JSON booleans (`true`/`false`), not strings. A missing local
+file or key uses the defaults shown above; the example is a setup template,
+not an override of local preferences. Invalid values/unknown keys are reported;
 continue clearly authorized work and resolve only the affected preference before
 acting on uncertain scope. The flags retain save/preservation checks, valid
 dimensions, mandatory visual correction and file validation. They do not

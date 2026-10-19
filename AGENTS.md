@@ -8,6 +8,10 @@ This repository is a map-creation workspace containing the Python MCP server and
 - Read map-workflow.json at the resolved Git root before map/export work, even
   from nested directories. These booleans select the skill workflow; explicit
   user instructions take precedence. See README.md#workflow-preferences.
+- map-workflow.json is local and Git-ignored; map-workflow.example.json is the
+  tracked setup template. Never replace local preferences with example values.
+  If the local file is absent, use skill defaults or initialize it from the
+  example without overwriting an existing file.
 - fully_automatic enables routine creation, opening, restarting, saving and
   requested export without repeated permission questions. reasoning controls
   concise design rationale; enhancing controls optional additions; neither

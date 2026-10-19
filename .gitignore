@@ -8,6 +8,9 @@ dist/
 .venv/
 venv/
 
+# Local map workflow preferences
+/map-workflow.json
+
 # Runtime-generated mod icon
 mod/dungeondraft-mcp-bridge/icons/mcp_bridge.png
 
