@@ -2,14 +2,19 @@
 
 A workspace for building Dungeondraft maps with AI, backed by an MCP server.
 The server lets an AI client inspect and edit a running Dungeondraft
-map. Version 1.0.0 targets Dungeondraft 1.2.0.1 on Windows, using Godot 3.4.2
+map. Version 1.0.1 targets Dungeondraft 1.2.0.1 on Windows, using Godot 3.4.2
 and bridge protocol 23.
 
-The Python MCP server and bridge mod share release version **1.0.0**. The
+The Python MCP server and bridge mod share release version **1.0.1**. The
 transport protocol remains **23**: the lifecycle additions preserve its JSON
-format and existing commands. MCP initialization reports server version 1.0.0;
-bridge `ping` and `get_capabilities` report `bridge_version: "1.0.0"` separately
+format and existing commands. MCP initialization reports server version 1.0.1;
+bridge `ping` and `get_capabilities` report `bridge_version: "1.0.1"` separately
 from `protocol: 23`.
+
+Version 1.0.1 adds granular skill automation with developer concept approval
+enabled by default, and refines guidance for tactical terrain, prop collision
+and concealed entrances. Workflow preferences are interpreted by the skills;
+the bridge commands are unchanged.
 
 The Python server communicates with the client over MCP stdio. The
 Dungeondraft mod receives commands over localhost TCP at 127.0.0.1:8787.
@@ -57,7 +62,7 @@ registering the server or changing tool definitions.
 Call ping, then get_status, then get_capabilities.
 
 - ping must report pong and protocol 23.
-- For this release, ping must also report bridge_version: "1.0.0". A different
+- For this release, ping must also report bridge_version: "1.0.1". A different
   release version means the editor is still running an older bridge.
 - get_status must report map_open: true; it also provides map size and center.
 - get_capabilities reports supported commands, batch limits, engine version,
@@ -107,7 +112,9 @@ the skills, not automatically by the Python server.
 
 ~~~json
 {
-  "fully_automatic": true,
+  "automatic_open_maps": true,
+  "automatic_concept_approval": false,
+  "automatic_exports": true,
   "reasoning": true,
   "enhancing": true,
   "export_to_foundry": false
@@ -116,9 +123,11 @@ the skills, not automatically by the Python server.
 
 | Setting | `true` | `false` |
 | --- | --- | --- |
-| `fully_automatic` | Perform necessary supported creation/open/restart, editing, saving and requested export without repeated approval prompts. | Present the design and required lifecycle/export choices together if not already authorized; wait at that checkpoint. |
+| `automatic_open_maps` | Perform necessary map creation/opening/reopening and editor startup/restart through lifecycle tools. | Present the concrete lifecycle action and wait for approval, unless that action is already explicitly approved. |
+| `automatic_concept_approval` | After generating, showing and reviewing a concept, continue construction without a separate approval reply. | **Default:** ask the developer to approve the displayed concept and wait before creating or populating its native map. |
+| `automatic_exports` | Generate final files included in the requested workflow after map review. | Show the reviewed map and proposed final exports, then wait for approval unless those exports are already explicitly approved. Internal review renders and preservation saves still run. |
 | `reasoning` | Include concise design/export rationale in the existing handoff and notes. | Omit extra rationale; retain planning and verification. |
-| `enhancing` | Add fitting optional tactical, exploratory and decorative improvements within the brief. | Build the requested functional place without unsolicited extras. |
+| `enhancing` | Include a readable tactical feature by default, omitting it only when it clearly does not fit; add fitting exploratory/decorative details. | Build the requested functional place without unsolicited extras. |
 | `export_to_foundry` | Include Foundry file delivery by default, using supported Foundry 14 unless another target is established. | Export to Foundry only on request or an established session requirement. |
 
 All values must be JSON booleans (`true`/`false`), not strings. A missing local
@@ -131,6 +140,21 @@ authorize discarding unrelated maps, uploads, publishing, installing modules or
 changes to an unrelated live Foundry world. `enhancing` does not expand an
 existing-map export request into a redesign. An image-only request overrides
 automatic Foundry delivery.
+
+The concept checkpoint applies to each new or materially replaced concept;
+a general request to build a map is not approval of an unseen image. Silence
+or elapsed time never counts as approval. A concept already approved for the
+same design needs no repeat approval, and routine revisions/export of an
+existing map need no new concept. With automatic concept approval enabled,
+the preview and its visual review are still required. Explicitly requested
+approval always takes precedence. Combine ready lifecycle/export questions
+when useful, but never treat one automation flag as enabling another.
+
+The legacy `fully_automatic` setting is removed. To migrate a local file, remove
+that key, set missing `automatic_open_maps` and `automatic_exports` to its old
+boolean value, and set missing `automatic_concept_approval` to `false`.
+Preserve existing granular values and all other preferences; the old value
+must never imply concept approval.
 
 Routine map opening/creation uses the lifecycle tools below. If initial ping
 fails, a single controlled lifecycle call can launch a closed editor; the
@@ -154,8 +178,10 @@ parameter reference; call get_map_spec_schema for the generated planning schema.
 
 For a complete encounter:
 
-1. Use create_map with a blank native template and suitable dimensions, or
-   open_map for an existing native map.
+1. For a new map, plan and show the concept, then apply the concept approval
+   checkpoint before create_map with a blank template and suitable dimensions.
+   For an existing map, use open_map when needed. Honor automatic_open_maps
+   before either lifecycle action.
 2. Discover assets using list_asset_categories, list_assets or list_asset_metadata.
 3. Call plan_battlemap with a specification in tiles. Review errors, warnings,
    resolved artwork and route checks before calling apply_battlemap.
@@ -166,7 +192,8 @@ For a complete encounter:
    validation does not establish visual quality.
 6. Save the native map with save_map. Use save_battlemap_project when planner
    ownership, specifications and semantic IDs must survive a server restart.
-7. Export and inspect the final artwork for every playable floor.
+7. Apply automatic_exports, then export and inspect the final artwork for every
+   playable floor. Internal review renders do not require final-export approval.
 
 Low-level coordinates use **256 woxels per tile**. Planning specifications use
 tiles. Export pixels per tile are a separate setting. Native floor IDs and list

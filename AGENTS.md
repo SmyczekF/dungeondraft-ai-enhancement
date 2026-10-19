@@ -12,8 +12,11 @@ This repository is a map-creation workspace containing the Python MCP server and
   tracked setup template. Never replace local preferences with example values.
   If the local file is absent, use skill defaults or initialize it from the
   example without overwriting an existing file.
-- fully_automatic enables routine creation, opening, restarting, saving and
-  requested export without repeated permission questions. reasoning controls
+- automatic_open_maps controls lifecycle actions; automatic_exports controls
+  final file generation. automatic_concept_approval defaults to false: show the
+  generated concept, ask for explicit developer approval and wait before native
+  creation/population. A general map request does not approve an unseen concept.
+  Approval of one stage does not enable other automation flags. reasoning controls
   concise design rationale; enhancing controls optional additions; neither
   disables correctness or visual review. export_to_foundry adds Foundry file
   delivery by default; false still allows an explicit Foundry request.
@@ -27,6 +30,8 @@ This repository is a map-creation workspace containing the Python MCP server and
 ## Before live operations
 
 - For a reachable bridge, call ping, then get_status, then get_capabilities.
+- Honor configured concept/lifecycle checkpoints before create_map/open_map/
+  reopen_map, including the lifecycle fallback after a failed initial ping.
 - Require protocol 23 and map_open=true before map edits. A failed initial ping
   does not itself require manual startup: use one authorized open_map/create_map
   call with a known native file/bootstrap. The lifecycle controller can start a

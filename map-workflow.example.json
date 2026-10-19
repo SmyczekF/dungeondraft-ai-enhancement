@@ -1,5 +1,7 @@
 {
-  "fully_automatic": true,
+  "automatic_open_maps": true,
+  "automatic_concept_approval": false,
+  "automatic_exports": true,
   "reasoning": true,
   "enhancing": true,
   "export_to_foundry": false
