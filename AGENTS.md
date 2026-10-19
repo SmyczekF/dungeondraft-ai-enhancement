@@ -5,6 +5,14 @@ This repository is a map-creation workspace containing the Python MCP server and
 ## Workspace and map output
 
 - For map work, use .agents/skills/dungeondraft-map-skill/SKILL.md.
+- Read map-workflow.json at the resolved Git root before map/export work, even
+  from nested directories. These booleans select the skill workflow; explicit
+  user instructions take precedence. See README.md#workflow-preferences.
+- fully_automatic enables routine creation, opening, restarting, saving and
+  requested export without repeated permission questions. reasoning controls
+  concise design rationale; enhancing controls optional additions; neither
+  disables correctness or visual review. export_to_foundry adds Foundry file
+  delivery by default; false still allows an explicit Foundry request.
 - Resolve the Git repository root and save map output in dd-maps/<encounter-slug>/.
   This rule applies from nested working directories too. Explicit user destinations override it.
 - Keep each encounter's native map, current floor exports, concept preview, notes,
@@ -14,9 +22,14 @@ This repository is a map-creation workspace containing the Python MCP server and
 
 ## Before live operations
 
-- Call ping, then get_status, then get_capabilities.
-- Require protocol 23 and map_open=true. If ping fails, request that the user
-  start Dungeondraft with MCP Bridge enabled and load a map; do not retry blindly.
+- For a reachable bridge, call ping, then get_status, then get_capabilities.
+- Require protocol 23 and map_open=true before map edits. A failed initial ping
+  does not itself require manual startup: use one authorized open_map/create_map
+  call with a known native file/bootstrap. The lifecycle controller can start a
+  closed editor and refuses to stop a running editor with an unreachable bridge.
+  After success, repeat the handshake; after failure inspect the reported state
+  and request only the specific setup/input that tools cannot handle. Do not
+  retry blindly or ask the user to open/restart a map that lifecycle can manage.
 - These tools edit a live map. Inspect existing content before changing it.
 - Coordinates are woxels, 256 per tile; planning specifications use tiles.
 - Discover assets before placement. Feed returned element IDs into edits.
