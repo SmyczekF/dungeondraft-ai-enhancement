@@ -85,6 +85,60 @@ class ReleaseTests(unittest.TestCase):
         (self.root / "map-release.json").write_text(json.dumps(self.cfg))
         return self.root
 
+    def prepared(self):
+        self.scene['levels'][0].update(_id='ground', name='Ground')
+        self.scene_path.write_text(json.dumps(self.scene))
+        self.meta['scene_sha256'] = digest(self.scene_path.read_bytes())
+        (self.root / 'foundry/export.json').write_text(json.dumps(self.meta))
+        (self.root / 'gridless.png').write_bytes(png())
+        (self.root / 'gridded.png').write_bytes(png(200))
+        (self.root / 'release-readme.txt').write_text('Import Data. Five feet per square.')
+        (self.root / 'patreon.md').write_text('Test Cove - 1x1')
+        self.cfg.pop('floors', None)
+        self.cfg.update(scene='foundry/foundry-scene.json', export_metadata='foundry/export.json',
+                        readme='release-readme.txt', patreon_readme='patreon.md',
+                        artwork=[dict(name='ground', levels=['Ground'], native_labels=['Ground'],
+                                      gridless='gridless.png', gridded='gridded.png',
+                                      gridless_sha256=digest(png()), gridded_sha256=digest(png(200)))])
+
+    def test_prepared_connected_scene_keeps_transitions_and_embedded_canopy(self):
+        self.scene['levels'].append({'_id': 'upper', 'name': 'Upper',
+                                     'background': {'src': self.scene['levels'][0]['background']['src']}})
+        self.scene['tiles'] = [{'texture': {'src': self.scene['levels'][0]['background']['src'],
+                                           'anchorX': 0, 'anchorY': 0},
+                                'x': 0, 'y': 0, 'width': 128, 'height': 128,
+                                'occlusion': {'modes': [4], 'alpha': .3}, 'elevation': 15}]
+        self.scene['regions'] = [{'behaviors': [{'type': 'changeLevel', 'system': {'destination': 'upper'}}]}]
+        self.prepared()
+        second = dict(self.cfg['artwork'][0], name='upper', levels=['Upper'], native_labels=[])
+        self.cfg['artwork'].append(second)
+        output = build_release(self.config(), self.editor)
+        self.assertFalse(self.editor.calls)
+        with zipfile.ZipFile(output / 'test-cove-foundry.zip') as z:
+            self.assertEqual(set(z.namelist()), {'test-cove-scene.json', 'READ-ME.txt', 'PATREON-README.md'})
+            public = json.loads(z.read('test-cove-scene.json'))
+            self.assertEqual(len(public['levels']), 2)
+            self.assertEqual(public['tiles'][0]['occlusion']['alpha'], .3)
+            self.assertEqual(public['regions'], self.scene['regions'])
+            self.assertNotIn(NAMESPACE, public['flags'])
+
+    def test_prepared_stale_artwork_rejected_without_replacing_zip(self):
+        self.prepared()
+        output = build_release(self.config(), self.editor)
+        original = (output / 'test-cove-foundry.zip').read_bytes()
+        (self.root / 'gridded.png').write_bytes(png(100))
+        with self.assertRaisesRegex(ReleaseError, 'hash is stale'):
+            build_release(self.config(), self.editor)
+        self.assertEqual((output / 'test-cove-foundry.zip').read_bytes(), original)
+
+    def test_prepared_rejects_external_or_shifted_canopy(self):
+        for texture in [{'src': 'external.png', 'anchorX': 0, 'anchorY': 0},
+                        {'src': self.scene['levels'][0]['background']['src'], 'anchorX': .5, 'anchorY': .5}]:
+            self.scene['tiles'] = [{'texture': texture, 'x': 0, 'y': 0, 'width': 128, 'height': 128}]
+            self.prepared()
+            with self.assertRaises(ReleaseError):
+                build_release(self.config(), self.editor)
+
     def test_three_minimal_downloads_and_instructions_preserve_secret(self):
         output = build_release(self.config(), self.editor)
         self.assertEqual(self.editor.calls[:3], ["ping", "status", "capabilities"])

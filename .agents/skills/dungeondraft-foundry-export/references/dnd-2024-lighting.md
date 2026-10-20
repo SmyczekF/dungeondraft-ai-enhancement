@@ -23,6 +23,12 @@ A small lantern is not a separate standard equipment profile. Choose its content
 - **Small oil lantern:** a useful local default is the Oil Lamp profile, **15 / 45**. Mapping that asset to a Lamp is an encounter choice, not a separate published “small lantern” rule.
 - **Actual hooded lantern:** use its published raised/lowered profile, even if the chosen sprite is small. Do not silently scale a rules item by artwork size.
 
+## Campaign minimum for placed map fixtures
+
+The user's map-creation preference overrides the small-equipment defaults above: ordinary lit lamps/lanterns and equivalent fixtures use at least **20 ft Bright / 40 ft total Dim** (Torch-sized illumination). This is a campaign/GM display choice, not a claim that a published Candle or Lamp has Torch statistics. Retain the RAW profile/source separately from the delivered map profile and the reason for the override. Explicitly requested weak, extinguished or special lights retain their intended state/profile.
+
+A room with existing active lighting should have at least **dim light throughout its accessible area**, with doors closed and no borrowed exterior light. This does not require adding a lamp to an unlit room; occupancy alone is insufficient. A windowless warehouse can need carried torches, and a window-only room can be dark at night. For window-lit spaces, check daytime aperture illumination instead of imposing a new fixture. Check far corners, alcoves, adjoining rooms and walls. Extend the dim reach or add a plausible lamp/ceiling emitter when necessary; do not automatically expand bright to fill a large room. Record deliberately dark rooms/areas instead of treating accidental black patches as atmosphere. A small room may fit entirely within a 20 ft bright radius; this is consistent with the minimum, not a missing dim setting.
+
 ## Suggested mundane-fire defaults — GM rulings
 
 The accessible 2024 equipment/vision text gives no universal mundane campfire-size table. These are practical encounter defaults, **not prescribed campfire rules**. Adventure-specific values or an explicit GM choice take precedence.
@@ -43,8 +49,12 @@ Universal VTT carries one range, and the examined importer derives bright as hal
 
 Review color/animation separately. Test the bright boundary, outer dim boundary, wall interaction and hood changes using a player-view token under night/test lighting. Global daylight can mask errors. Do not reset campaign fog or rewrite token senses to hide a light configuration problem.
 
+### Regional environmental lighting
+
+Use [regional lighting](regional-lighting.md): core Scene Regions keep room/cave darkness separate from outdoor daylight and dim nighttime illumination. Environmental day emitters use bright-only coverage; indoor fixtures retain distinct bright/dim ranges. A scene or room darkness level near zero can make bright and dim look alike even when their radii are correct; use the interior region to provide visual separation, and test with basic vision before attributing the result to the light profile.
+
 ### Avoid excessive visual glow
 
 Rules radii describe illumination coverage, not glow strength. Foundry's `config.alpha` is **Color Intensity**, distinct from `config.luminosity`, which controls rendered brightness. Native Dungeondraft `intensity` is not a directly interchangeable alpha. The examined adapter copied native intensity 0.9 to alpha 0.9; Universal Battlemap Importer used `0.05 * intensity`, giving 0.045 for the same source. That twentyfold increase in color intensity caused the reported washed-out fire/lantern appearance.
 
-When preserving an existing imported map's appearance, match its known working visual settings before changing ranges. A previously verified camp example used alpha **0.045**, normal Adaptive Luminance coloration (`coloration: 1`), luminosity **0.5**, attenuation **0.5**, and neutral contrast/saturation/shadows. These are an artwork-specific reference, not a mandatory preset for future maps or a D&D rule. Keep the verified bright/dim distances intact. Avoid halo, sunburst and intense animations unless requested; inspect actual Foundry rendering before claiming visual acceptance. See [Foundry's color intensity and luminosity controls](https://foundryvtt.com/article/lighting/).
+When preserving an existing imported map's appearance, match its known working visual settings before changing ranges. A previously verified camp example used alpha **0.045**, normal Adaptive Luminance coloration (`coloration: 1`), luminosity **0.5**, attenuation **0.5**, and neutral contrast/saturation/shadows. These are an artwork-specific reference, not a mandatory preset for future maps or a D&D rule. Preserve the chosen campaign bright/dim distances while adjusting appearance. Avoid halo, sunburst and intense animations unless requested; inspect actual Foundry rendering before claiming visual acceptance. See [Foundry's color intensity and luminosity controls](https://foundryvtt.com/article/lighting/).

@@ -9,7 +9,7 @@ For map recipients, the README's [Import into Foundry VTT](../../../../README.md
 - Read the working project's root `map-workflow.json` through the skill. Enter this route for a requested export or `export_to_foundry=true`; false never cancels an explicit export request. `automatic_open_maps` controls lifecycle checkpoints and `automatic_exports` controls final file generation. Neither overrides the new-map concept checkpoint (`automatic_concept_approval=false` by default) or authorizes unrelated world mutations.
 - Establish game system, intended square scale, playable floors and available runtime access from context. Default an unspecified Foundry generation to the supported adapter's Foundry 14; clarify only conflicts or missing input that change delivery. Load the canonical map with `open_map` and restore saved ownership when the selected route requires a planner project; do not ask for manual opening by default. Exported-file inspection needs no editor. These instructions do not authorize installing modules, uploading to a server or changing an existing world; use the authorization provided by the actual map/import request.
 - **Repository adapter:** `export_battlemap` writes a native `.dd2vtt`, PNG, Foundry **14** scene JSON, GM import macro, encounter semantics, validation and completion manifest. It requires an applied/restored, validated planner project and exactly one native level. It does not connect to Foundry. Preserve planner ownership with a project bundle when needed; do not invent ownership for an arbitrary native map.
-- **Universal VTT route (discouraged for our completed Foundry exports):** [Dungeondraft's official VTT Integrations guidance](https://dungeondraft.net/) links to [Universal Battlemap Importer](https://foundryvtt.com/packages/dd-import/) (`dd-import`) for native `.dd2vtt` files. This remains a valid alternative for basic native maps, but the examined importer does not transfer our Foundry-specific movement-only, Limited or directional wall settings, locks, global illumination/threshold or every bright/dim pair. Prefer the completed scene JSON when it is supplied. If the user intentionally chooses Universal VTT, check target-generation compatibility and consult the [maintainer's instructions](https://github.com/moo-man/FVTT-DD-Import); describe the missing behaviors explicitly. This is an alternative route, not an extra import to run on top of the completed scene.
+- **Universal VTT route (discouraged for our completed Foundry exports):** [Dungeondraft's official VTT Integrations guidance](https://dungeondraft.net/) links to [Universal Battlemap Importer](https://foundryvtt.com/packages/dd-import/) (`dd-import`) for native `.dd2vtt` files. This remains a valid alternative for basic native maps, but the examined importer does not transfer our Foundry-specific movement-only, Limited or directional wall settings, locks, the prepared regions and environmental-light setup or every bright/dim pair. Prefer the completed scene JSON when it is supplied. If the user intentionally chooses Universal VTT, check target-generation compatibility and consult the [maintainer's instructions](https://github.com/moo-man/FVTT-DD-Import); describe the missing behaviors explicitly. This is an alternative route, not an extra import to run on top of the completed scene.
 - **Multiple floors or unsupported projects:** preserve true native floors and aligned per-floor artwork. Use supported native VTT export only where live capabilities establish its floor scope, otherwise hand off explicit per-floor setup. The repository adapter does not assemble a multi-floor Foundry scene, stairs or transitions. Agree a target-version workflow before promising automatic multi-floor delivery; do not assume a particular module is required or installed.
 
 ## Design data that artwork cannot carry
@@ -55,6 +55,50 @@ See the official [wall behavior guide](https://foundryvtt.com/article/walls/), [
 
 ### Preserve semantics through import
 
+For observation windbreaks or defensive apertures, explicitly decide which side
+can see out. Core direction affects **all configured restrictions** on a wall.
+When the structure blocks walking both ways but permits outward sight/light,
+use a bidirectional movement-only segment plus a coincident directional
+sight/light segment. Do not leave another opaque segment across it. Determine
+the clear side from actual endpoints and an interior sample, then test opposing
+origins and the ends. Use Proximity for an aperture that can be seen through
+only from nearby (often 5–10 ft when appropriate); do not add that distance limit
+to an open lookout view that should work throughout the yard. Reverse Proximity
+has the opposite distance condition. These are 2D approximations, not automatic
+height or cover rules. Ordinary windows remain transparent from both sides
+unless the construction specifically supports a different behavior.
+
+For **nearby-only outward sight with an opaque outside**, a clear-sided
+directional wall alone is insufficient: the clear side bypasses its threshold.
+Use a bidirectional movement wall with Sight Proximity and a separate
+directional Sight Normal wall which is clear from inside. Near inside viewers
+pass both perception checks; far inside viewers fail Proximity, and outside
+viewers fail the directional wall at any distance. Choose light independently.
+Store thresholds in scene distance units and test the target's token-radius
+adjustment, near/far origins on both sides and the intended observation point.
+
+### Water and movement actions
+
+Coastal seas should support swimming rather than behave as ordinary dry ground.
+Make a core **Modify Movement Cost** region over actual water, subtracting land,
+islands, piers and other dry platforms. Assign the intended scene level and a
+water-surface elevation ceiling so high tokens and upper decks are unaffected.
+Do not make swimming impossible with an invisible solid shoreline wall.
+
+For inspected Foundry 14.369 + dnd5e 6.0.6, use `difficulties` such as
+`{"walk":2,"swim":1,"fly":1}`. The walking entry handles costly wading/GM
+override; the user selects **Swim** for deep water. Dnd5e itself adds movement
+cost when the actor lacks a swimming speed. Setting swim to 2 as well would
+penalize natural swimmers and stack extra cost for others. Core Regions do not
+force/select movement actions: state that limitation, and verify ruler action,
+actors with/without swim speed, flight and any water-walking exception. Do not
+describe a movement multiplier as forced swimming or automated drowning.
+
+Check actual cost resolution before using `null` as an impassable action. The
+inspected core terrain-effect multiplication coerces null to zero; treating it
+as an infinite cost would create free movement. Preserve separate shallow-water
+or flooded-footing rulings when the artwork represents wading, not deep sea.
+
 Native Universal VTT LOS and the examined importer do not carry arbitrary independent sense restrictions, directions or locks. Only props that actually warrant restrictions need explicit Foundry geometry. Keep these corrections in Foundry scene JSON/macros and retain them in the encounter manifest; do not claim the unchanged `.dd2vtt` includes them. Reinspect importer support when it changes.
 
 When the user wants to import/re-import the finished map, put all corrections directly in the delivered Foundry scene JSON and hand off that file with its image. Standard Universal Battlemap Importer cannot preserve all these semantics; use Foundry's scene **Import Data** for the complete scene. Retain a truthful `_stats.coreVersion` matching the target schema: the inspected v14 importer treats missing version metadata as pre-v10 and runs migrations that can replace level data.
@@ -68,12 +112,16 @@ If an update must preserve existing world changes, an idempotent **current-scene
 - Record image dimensions, pixels per square, distance per square, grid type, origin and floor alignment. Coordinates convert as `pixels = woxels / 256 * pixels_per_square` before any scene offset. Image DPI metadata is not grid size. Verify the target's grid constraints; prefer at least 50 pixels per square for Foundry, normally 100–128 where the export budget permits. The bridge accepts 20–256, but acceptance there does not prove runtime compatibility. Respect 8192 pixels per side and 16 megapixels.
 - The current adapter hardcodes a square grid at **5 ft per square**, zero padding/shift and a Ground level spanning 0–10 ft. Other scales or elevations need an explicitly supported conversion and review; changing grid distance alone also leaves imported light radii wrong. Do not crop, rescale or shift the background independently of its walls/lights. See [scene configuration](https://foundryvtt.com/article/scenes/).
 - Export with lighting unbaked for dynamic Foundry lighting. Retain visible table/wall fixtures and place native lights at them; omit ceiling-fixture artwork from the playable floor while retaining its emitter, following the user preference. Dungeondraft `range` is a radius scale, not a feet value. The adapter converts native exported ranges to feet, makes the bright radius half the dim radius, uses 360-degree emission and approximates intensity. Native `intensity` copied directly to Foundry color alpha can greatly amplify the glow compared with an existing import: check the lighting guide's **Avoid excessive visual glow** section, preserve known working appearance settings and correct these in the completed scene. Record any different intended radii or effects for correction.
-- Always deliver global illumination **enabled**, with a darkness threshold of **0.8**, as the user's default for every Foundry map. In v14 the fields are `environment.globalLight.enabled: true` and `environment.globalLight.darkness.max: 0.8`; retain the range minimum of 0. Apply these settings to the complete scene JSON and any alternate scene-creation payload, and record them in encounter metadata. Override only when the user explicitly requests different settings.
+- Use core **Scene Regions / Adjust Darkness Level** to separate exterior light from rooms and underground areas, following [regional lighting](regional-lighting.md). Completed scenes need outdoor bright daylight, a dim nighttime baseline and sensible coverage wherever a fixture/window actually supplies light. Window-lit rooms can use a daytime dim floor; sealed unlit rooms and caves stay excluded. Raw adapter GI-off output is only a safe draft, not the finished lighting policy. Record regional parameters, source profiles and intentional darkness in all scene/import payloads.
 - Review scene darkness/global illumination, token vision and fog exploration together. A daylight exterior and a dark interior need intentional illumination boundaries. Baked shadows or dark artwork do not establish mechanical visibility. Set and test bright/dim radii, wall occlusion and activation using [Foundry lighting controls](https://foundryvtt.com/article/lighting/); do not promise native light-cookie parity.
+
+### Regional illumination and shadow control
+
+Use [regional lighting](regional-lighting.md) for the preferred core mechanism, exact v14 fields, day/night coverage, doorway/window emitters and minimum interior illumination. It replaces the former GI-off/dense-point-light approach. Global light is acceptable only with verified interior/cave exclusions; never illuminate underground areas as an accidental consequence of an outdoor baseline.
 
 ### Rules-based light radii (D&D 2024)
 
-Read the [lighting quick guide](dnd-2024-lighting.md) when choosing sources or reviewing imported illumination. It provides published equipment profiles, explicit GM defaults for fire sizes and the conversion from additional dim distance to Foundry's total dim radius. Source identity/state must be established; do not infer rules from sprite size, native `range`, alpha or a generic half-bright conversion. Retain the rule citation and any assumptions with each light, correct both new-scene data and current-scene patches, and verify the resulting boundaries in player view. Universal VTT's single radius cannot encode every bright/dim pair.
+Read the [lighting quick guide](dnd-2024-lighting.md) when choosing sources or reviewing imported illumination. It provides published equipment profiles, explicit GM defaults for fire sizes and the conversion from additional dim distance to Foundry's total dim radius. Source identity/state must be established; do not infer rules from sprite size, native `range`, alpha or a generic half-bright conversion. Apply the campaign minimum for map fixtures separately, clearly distinguishing it from the published equipment values. Retain the rule citation and any assumptions with each light, correct both new-scene data and current-scene patches, and verify the resulting boundaries in player view. Universal VTT's single radius cannot encode every bright/dim pair.
 
 ## Export and import handoff
 

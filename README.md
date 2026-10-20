@@ -2,19 +2,21 @@
 
 A workspace for building Dungeondraft maps with AI, backed by an MCP server.
 The server lets an AI client inspect and edit a running Dungeondraft
-map. Version 1.0.1 targets Dungeondraft 1.2.0.1 on Windows, using Godot 3.4.2
+map. Version 1.0.2 targets Dungeondraft 1.2.0.1 on Windows, using Godot 3.4.2
 and bridge protocol 23.
 
-The Python MCP server and bridge mod share release version **1.0.1**. The
+The Python MCP server and bridge mod share release version **1.0.2**. The
 transport protocol remains **23**: the lifecycle additions preserve its JSON
-format and existing commands. MCP initialization reports server version 1.0.1;
-bridge `ping` and `get_capabilities` report `bridge_version: "1.0.1"` separately
+format and existing commands. MCP initialization reports server version 1.0.2;
+bridge `ping` and `get_capabilities` report `bridge_version: "1.0.2"` separately
 from `protocol: 23`.
 
-Version 1.0.1 adds granular skill automation with developer concept approval
-enabled by default, and refines guidance for tactical terrain, prop collision
-and concealed entrances. Workflow preferences are interpreted by the skills;
-the bridge commands are unchanged.
+Version 1.0.2 preserves connected Foundry levels, overhead Tiles and embedded
+Vehicle Actors when packaging reviewed exports. It adds hash-pinned artwork
+releases with Patreon copy, disables blanket global light in raw scene drafts,
+and refines skills for regional lighting, water movement, visibility and map
+layout. Workflow preferences are interpreted by the skills; the bridge commands
+and protocol are unchanged.
 
 The Python server communicates with the client over MCP stdio. The
 Dungeondraft mod receives commands over localhost TCP at 127.0.0.1:8787.
@@ -62,7 +64,7 @@ registering the server or changing tool definitions.
 Call ping, then get_status, then get_capabilities.
 
 - ping must report pong and protocol 23.
-- For this release, ping must also report bridge_version: "1.0.1". A different
+- For this release, ping must also report bridge_version: "1.0.2". A different
   release version means the editor is still running an older bridge.
 - get_status must report map_open: true; it also provides map size and center.
 - get_capabilities reports supported commands, batch limits, engine version,
@@ -216,13 +218,31 @@ its corrected Foundry export, and writes three separate downloads in `release/`:
 | --- | --- |
 | `<slug>-gridded.zip` | Native PNGs with visible grids, one per floor, plus setup instructions. |
 | `<slug>-gridless.zip` | Gridless PNGs from the exact embedded Foundry backgrounds, plus setup instructions. |
-| `<slug>-foundry.zip` | Corrected Foundry 14 scenes, each bundled into one JSON with its image, walls, doors and lights; one JSON per floor, plus import/play instructions. |
+| `<slug>-foundry.zip` | Corrected Foundry 14 scenes with embedded artwork, walls, doors, lights and Regions; connected levels stay in one scene, with import/play instructions. |
 
 `RELEASE-NOTES.txt` contains a package summary and installation instructions.
 Loose image folders are provided for inspection; `build.json` records source
 and package hashes. Recipients do not need the native `.dungeondraft_map`,
 `.dd2vtt`, concept, manifests, asset catalogs or Python scripts. Asset-pack
 files are not part of these downloads. This command creates local files.
+
+For already reviewed exports, `map-release.json` can instead use `artwork`,
+`scene`, `export_metadata`, `readme` and `patreon_readme`, as in the current
+`dd-maps/` encounters. Each artwork entry names its playable `levels`, all
+contributing `native_labels`, gridded/gridless PNG paths and their SHA-256 hashes.
+The same command then packages those files offline, checking native/scene export
+hashes and all artwork hashes. It keeps one connected scene with its real core
+levels, movement/lighting regions and embedded overhead Tiles; it does not split
+connected stairs into separate scenes. Flat component artwork is shipped as its
+reviewed composite. An optional `actor` includes a hash-verified, self-contained
+Vehicle Actor. Package READMEs describe the actual map mechanics and import
+steps; `PATREON-README.md` provides the English post title and description.
+
+Generated local map downloads and Patreon copy are indexed in
+`dd-maps/PATREON-README.md`; generated map content is Git-ignored and is not
+distributed with this source repository. Prepared artwork configuration pins
+the reviewed images: after changing a map, refresh
+its corrected export, visually check the artwork, then update those hashes.
 
 Create this small configuration once per encounter (the map skill should keep
 it with the final map). Paths are relative to the encounter, and `native_label`
@@ -250,7 +270,7 @@ under `floors`. If omitted, the builder packages the existing corrected scenes
 only when their hashes still match. Raw adapter output must first be finalized
 with the export skill; this builder does not infer secret doors from artwork.
 
-The current build format supports embedded-PNG Foundry 14 scenes, square grids
+The legacy native-capture build format supports embedded-PNG Foundry 14 scenes, square grids
 at 5 feet per square, and one scene per floor. It validates dimensions, origin,
 resolution and source hashes, rejects stale/shifted scenes, and excludes internal
 ownership flags from public JSON. It does not create actors, automate terrain
@@ -315,8 +335,12 @@ intentionally choose it.
 The examined importer reconstructs basic walls, doors and lights from generic
 Universal VTT data instead of using our finished Foundry settings. It does not
 transfer the additional movement-only cage walls, Limited/terrain rock and
-tent walls, one-way cliff restrictions, cage locks or global illumination with
-its 0.8 darkness threshold. Its single light range is converted to bright
+tent walls, one-way cliff restrictions, cage locks or the prepared local
+daylight emitters and regional illumination setup. Finished mixed scenes use
+core darkness regions to separate outdoor ambiance from rooms and caves;
+the raw adapter leaves global light disabled until that setup is prepared.
+The importer's
+single light range is converted to bright
 light at half the total dim radius, so pairs such as an oil lamp's 15/45 ft
 cannot be reproduced exactly. Basic walls/doors and image import can still
 work while these extra behaviors are missing.

@@ -32,29 +32,76 @@ Tiles for transparent overhead artwork. A full-map atlas works well with Radial
 occlusion; separate tiles allow independent whole-canopy Fade. Avoid Fade on a
 single entire-forest atlas unless fading every canopy together is intended.
 
-For **Foundry 14.368**, current core documentation defines:
+**User default: retain 30% opacity while revealing a token underneath**, unless
+explicitly specified otherwise. Apply this to treetops, awnings, raised decks,
+upper-floor artwork and other overhead scenery that obscures a token. In the
+inspected v14 Tile schema, set `occlusion.alpha: 0.30`; this means 30% visible,
+not 30% transparent. Keep normal, unoccluded Tile `alpha: 1` unless separately
+requested. This visual fade preserves the token's actual elevation and leaves
+the overhead structure perceptible while the token is selected or otherwise
+triggers occlusion. Do not lower the native artwork's opacity or change the
+whole playable level's visibility to implement it.
+
+For the inspected **Foundry 14.369**, the current Tile schema uses:
 
 ```json
 {
   "name": "Tree canopies",
   "x": 0, "y": 0,
   "width": 3584, "height": 3072,
-  "elevation": 25,
+  "elevation": 15,
   "levels": ["actualGroundLevelId"],
   "rotation": 0, "alpha": 1,
   "hidden": false, "locked": true,
-  "texture": {"src": "maps/encounter/canopy.png"},
-  "occlusion": {"mode": 4, "alpha": 0.15},
+  "texture": {
+    "src": "maps/encounter/canopy.png",
+    "anchorX": 0, "anchorY": 0,
+    "scaleX": 1, "scaleY": 1, "fit": "fill"
+  },
+  "occlusion": {"modes": [4], "alpha": 0.30},
   "restrictions": {"light": false, "weather": false}
 }
 ```
 
 Dimensions and elevation above are examples, not defaults for every encounter.
 Use a valid document ID, the actual scene level ID and the source-image bounds.
+**Tile coordinates are anchored coordinates in inspected v14.369.** BaseTile
+defaults `texture.anchorX/Y` to 0.5, and the client uses those values directly
+for its shape and mesh. A full-map Tile at `(0,0)` therefore needs explicit
+anchors `(0,0)` to align its top-left with the background; alternatively use
+the scene center with anchors `(0.5,0.5)`. Do not combine `(0,0)` with default
+center anchors: the image shifts half its width/height off-map. Validate the
+normalized Tile document and client transform, not just raw JSON coordinates
+or an alpha composite which ignores Tile placement. Check artwork landmarks
+and transformed alpha bounds against the corresponding ground locations.
 Keep the tile above intended ground/token elevations and assign it to the ground
 level. Choose light/weather behavior separately; leaves are not a sealed roof.
 Do not add canopy-footprint movement or opaque vision walls. Only actual trunks,
 rocks or other justified obstacles receive matching restrictions.
+
+For this campaign, requested walk-under tree crowns normally sit at **15 ft**.
+Inspect the current `occlusion.modes` SetField: do not copy the legacy singular
+`occlusion.mode` into new v14 exports. Keep the ground background free of crowns,
+and also deliver a registered flat composite for ordinary grid/gridless use.
+
+## Walkable raised decks
+
+A deck with usable space underneath needs two overlapping **playable Scene
+Levels in the same Scene**, unlike a canopy's export-only native level. Keep
+supports, ground routes and the ladder below; floorboards, furniture, office
+walls and the hatch belong above. Assign guardrails and office walls only to
+the upper level so they cannot block walking underneath. An elevated Tile can
+show the transparent deck art from both levels, with radial occlusion below;
+avoid baking a second copy into either background. In v14 a null upper
+`background.src` renders no texture; its visibility can include Ground.
+
+Use paired core Change Level regions at the actual staircase and hatch/ladder,
+not a remote marker. Add matching Define Surface floors with access holes when
+physical vertical restrictions are needed. Set visual occlusion separately
+from floor movement/sight restrictions: an opaque floor surface must not defeat
+the intended radial view of a ground token under the deck. Validate upper-token
+render ordering, lower routes, hatch descent and both embedded textures. Keep
+stairs above their own floor artwork when splitting native exports.
 
 V14 modes are flags: `NONE=0`, `FADE=1`, `SURFACE=2`, `RADIAL=4`, `VISION=8`.
 The examined installed **13.348** instead uses enum `RADIAL=3`, `VISION=4`.

@@ -226,6 +226,7 @@ def foundry_scene(native, plan, manifest, ppi, destination):
         "active": False,
         "navigation": True,
         "tokenVision": True,
+        "environment": {"globalLight": {"enabled": False}},
         "width": width * ppi,
         "height": height * ppi,
         "padding": 0,

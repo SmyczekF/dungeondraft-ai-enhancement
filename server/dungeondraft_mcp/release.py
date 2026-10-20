@@ -93,14 +93,19 @@ def load_config(path):
     return root, cfg
 
 
-def public_scene(source, expected_size, ppi):
+def public_scene(source, expected_size, ppi, *, connected=False):
     """Require a standalone registered scene; keep functional wall/light data."""
     scene = copy.deepcopy(source)
     if not str(scene.get("_stats", {}).get("coreVersion", "")).startswith("14."):
         raise ReleaseError("This builder supports Foundry 14 scene exports")
     levels = scene.get("levels", [])
-    if len(levels) != 1:
+    if not levels or (len(levels) != 1 and not connected):
         raise ReleaseError("Supply one corrected single-level scene per floor")
+    for level in levels[1:]:
+        single = copy.deepcopy(source)
+        single['levels'] = [level]
+        single['tiles'] = []
+        public_scene(single, expected_size, ppi)
     bg = levels[0]["background"]
     uri = bg.get("src", "")
     if not uri.startswith("data:image/png;base64,"):
@@ -117,8 +122,19 @@ def public_scene(source, expected_size, ppi):
     if (scene.get("padding", 0) != 0 or scene.get("shiftX", 0) != 0 or scene.get("shiftY", 0) != 0
             or any(bg.get(k, v) != v for k, v in {"offsetX": 0, "offsetY": 0, "rotation": 0, "scaleX": 1, "scaleY": 1}.items())):
         raise ReleaseError("Shifted, scaled or padded scenes need explicit registration before packaging")
-    if any(scene.get(k) for k in ("tokens", "notes", "sounds", "tiles", "journal", "journalEntryPage", "playlist", "playlistSound", "weather")):
+    if any(scene.get(k) for k in ("tokens", "notes", "sounds", "journal", "journalEntryPage", "playlist", "playlistSound", "weather")) or (scene.get('tiles') and not connected):
         raise ReleaseError("Standalone releases cannot depend on actors, journals or external media")
+    for tile in scene.get('tiles', []):
+        uri = tile.get('texture', {}).get('src', '')
+        if not uri.startswith('data:image/png;base64,'):
+            raise ReleaseError('Overhead artwork must be an embedded PNG')
+        data = base64.b64decode(uri.split(',', 1)[1], validate=True)
+        texture = tile['texture']
+        if (png_size(data) != expected_size or tile.get('x', 0) != 0 or tile.get('y', 0) != 0
+                or (tile.get('width'), tile.get('height')) != expected_size
+                or tile.get('rotation', 0) != 0 or texture.get('anchorX') != 0 or texture.get('anchorY') != 0
+                or texture.get('scaleX', 1) != 1 or texture.get('scaleY', 1) != 1):
+            raise ReleaseError('Overhead artwork needs verified full-canvas top-left registration')
     width, height = expected_size
     for wall in scene.get("walls", []):
         c = wall.get("c", [])
@@ -187,9 +203,10 @@ Keep the imported image scale, dimensions, origin and grid unchanged.
 The grid overlay starts hidden, but square snapping and measurement remain active.
 Place a token with vision and the correct player ownership; test as that player.
 Check door states, secret entrances, fog of war and light boundaries before play.
-Global illumination starts enabled up to darkness 0.8. At lower darkness, tokens
-can see within line of sight without local lights. For a light-dependent night
-scene, raise darkness above that threshold or adjust global illumination.
+Prepared regional lighting separates outdoor ambiance from enclosed spaces.
+Where included, daytime emitters provide bright light and the outdoor baseline
+remains dim at night; enclosed rooms/caves use their own darkness regions and
+local fixtures. Check regional coverage and day/night activation before play.
 The GM adjudicates difficult terrain and cover; ordinary loose props have no
 automatic movement penalty. Stone secret-door artwork does not animate on opening.
 For separate-floor scenes, move/copy tokens between the matching stair landings;
@@ -226,6 +243,12 @@ def write_zip(path, files):
 
 
 def build_release(config_path, editor=None):
+    config = Path(config_path).resolve()
+    if config.is_dir():
+        config /= 'map-release.json'
+    if 'artwork' in read_json(config):
+        from .release_prepared import build_prepared_release
+        return build_prepared_release(config)
     root, cfg = load_config(config_path)
     native = inside(root, cfg["native_map"])
     world = read_native(native)["world"]

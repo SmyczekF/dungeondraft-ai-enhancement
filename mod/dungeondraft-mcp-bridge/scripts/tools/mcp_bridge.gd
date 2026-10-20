@@ -21,7 +21,7 @@ var script_class = "tool"
 
 const HOST := "127.0.0.1"
 const PORT := 8787
-const BRIDGE_VERSION := "1.0.1"
+const BRIDGE_VERSION := "1.0.2"
 const PROTOCOL_VERSION := 23
 const MAX_REQUEST_BYTES := 1048576
 const LISTENER_KEY := "dungeondraft_mcp.bridge_listener"
